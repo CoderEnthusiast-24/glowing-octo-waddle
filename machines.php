@@ -24,11 +24,12 @@ $machines = get_machines();
     </div>
 
     <div class="table-wrap">
-      <table class="table js-filter-table" id="machinesTable">
+      <table class="table table--fit js-filter-table" id="machinesTable">
         <thead>
           <tr>
-            <th>Machine</th>
-            <th>Maintenance Date</th>
+            <th>Machine Name</th>
+            <th>Last Maintenance</th>
+            <th>Next Maintenance Due Date</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -37,7 +38,8 @@ $machines = get_machines();
             <?php [$statusClass, $statusLabel] = machine_status($m['date']); ?>
             <tr data-status="<?= $statusClass ?>">
               <td><?= htmlspecialchars($m['name']) ?></td>
-              <td><?= date('M d, Y', strtotime($m['date'])) ?></td>
+              <td class="nowrap"><?= table_date($m['last']) ?></td>
+              <td class="nowrap"><?= table_date($m['date']) ?></td>
               <td><span class="badge badge--<?= $statusClass ?>"><?= $statusLabel ?></span></td>
             </tr>
           <?php endforeach; ?>

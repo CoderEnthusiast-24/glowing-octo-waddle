@@ -73,32 +73,6 @@
 .result__title span { color: var(--gold); }
 .result .note { margin: -8px 0 14px; }
 
-.table-wrap {
-  overflow-x: auto;
-  background: var(--black-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.table { width: 100%; border-collapse: collapse; }
-.table th,
-.table td {
-  padding: 12px 18px;
-  text-align: left;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-.table th {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--gold);
-  border-bottom: 1px solid var(--gold-deep);
-}
-.table td { border-bottom: 1px solid var(--border); }
-.table tbody tr:last-child td { border-bottom: none; }
-.table tbody tr:hover { background: rgba(255, 224, 102, 0.04); }
-
 /* ---------- Status badges ---------- */
 .status {
   display: inline-block;
@@ -178,6 +152,4 @@
   .scan-box { flex-wrap: wrap; }
   .scan-box__input { flex-basis: calc(100% - 50px); }
   .scan-box__go { width: 100%; }
-  .table th,
-  .table td { padding: 10px 12px; }
 }

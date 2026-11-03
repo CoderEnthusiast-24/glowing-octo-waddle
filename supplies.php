@@ -53,22 +53,30 @@ foreach ($supplies as $s) {
     </section>
 
     <div class="toolbar">
-      <input type="search" id="tableSearch" placeholder="Search supplies...">
+      <input type="search" id="tableSearch" placeholder="Search supplies or type...">
     </div>
 
     <div class="table-wrap">
-      <table class="table js-filter-table" id="suppliesTable">
+      <table class="table table--fit js-filter-table" id="suppliesTable">
         <thead>
           <tr>
-            <th>Supplies</th>
-            <th class="num">Stock</th>
+            <th>Supplies Name</th>
+            <th>Supply Type</th>
+            <th class="num">Stock Quantity Left</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
           <?php foreach ($supplies as $s): ?>
-            <tr data-status="<?= supply_status($s['stock'], $s['min']) ?>">
+            <?php
+              $st = supply_status($s['stock'], $s['min']);
+              $stLabel = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock'][$st];
+            ?>
+            <tr data-status="<?= $st ?>">
               <td><?= htmlspecialchars($s['item']) ?></td>
+              <td><?= htmlspecialchars($s['type'] ?: '—') ?></td>
               <td class="num"><?= (int) $s['stock'] ?> <?= htmlspecialchars($s['unit']) ?></td>
+              <td><span class="badge badge--<?= $st ?>"><?= $stLabel ?></span></td>
             </tr>
           <?php endforeach; ?>
         </tbody>

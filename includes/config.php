@@ -13,8 +13,9 @@ define('APP_NAME', 'DermAve IMS');
 define('DEMO_USER', 'admin');
 define('DEMO_PASS', 'admin123');
 
-// Database settings (not used yet)
+// Database settings (XAMPP defaults - change if yours differ)
 define('DB_HOST', 'localhost');
+define('DB_PORT', 3306);   // XAMPP/MariaDB default. Change if MySQL runs on another port (e.g. 3307).
 define('DB_NAME', 'dermave_ims');
 define('DB_USER', 'root');
 define('DB_PASS', '');

@@ -11,10 +11,12 @@ require_once __DIR__ . '/config.php';
 
 $pageTitle  = $pageTitle  ?? 'DermAve IMS';
 $activePage = $activePage ?? '';
+$extraCss   = $extraCss   ?? [];   // optional extra stylesheets, e.g. ['barcode.css']
 
 // nav key => [label, file]. Use null for pages that are not built yet.
 $navItems = [
     'dashboard' => ['Dashboard', 'dashboard.php'],
+    'directory' => ['Directory', 'directory.php'],
     'products'  => ['Products',  'products.php'],
     'machines'  => ['Machines',  'machines.php'],
     'supplies'  => ['Supplies',  'supplies.php'],
@@ -27,7 +29,10 @@ $navItems = [
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($pageTitle) ?> | DermAve IMS</title>
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/../assets/css/style.css') ?>">
+<?php foreach ($extraCss as $css): ?>
+  <link rel="stylesheet" href="assets/css/<?= htmlspecialchars($css) ?>?v=<?= filemtime(__DIR__ . '/../assets/css/' . $css) ?>">
+<?php endforeach; ?>
 </head>
 <body>
 

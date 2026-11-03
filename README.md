@@ -23,6 +23,8 @@ dermave-ims/
 ├── login.php            # login page
 ├── logout.php           # ends the session
 ├── dashboard.php        # dashboard page
+├── directory.php        # unified directory (all items, Add / Edit / Archive)
+├── directory_api.php    # saves Add / Edit / Archive / Restore to MySQL (JSON)
 ├── products.php         # products page (item, batch, expiry, qty, status)
 ├── machines.php         # machines page (maintenance dates + status)
 ├── supplies.php         # supplies page (low stock, out of stock, stock list)
@@ -55,6 +57,7 @@ dermave-ims/
 - [x] Products
 - [x] Machines
 - [x] Supplies
+- [x] Directory
 - [ ] Barcode
 
 ## Team workflow
@@ -62,3 +65,28 @@ dermave-ims/
 - Pull before you start working.
 - Commit small, with clear messages.
 - Work on a branch for each page/feature and open a pull request into `main`.
+
+## Database (Directory)
+
+1. Start MySQL (XAMPP) and open phpMyAdmin.
+2. Import or run the script:
+   `sql/directory_schema.sql`
+3. It creates the database `dermave_ims`, the table `directory_items`, and seeds
+   5 machines + 5 products + 5 supplies from the DermAve Combined Item List.
+4. Update credentials in `includes/config.php` if needed (`DB_HOST`, `DB_USER`, `DB_PASS`).
+5. Once the DB is reachable, `directory.php`, `products.php`, `machines.php` and
+   `supplies.php` automatically use it (with a sample-data fallback otherwise).
+
+The Directory page has:
+- Search
+- Add / Edit / Archive buttons (Edit & Archive activate when row(s) are selected)
+- Clickable column headers that open sort + filter menus (Type, Name, Category, Qty, Date, Status)
+
+### Directory: Add / Edit / Archive
+
+- **Add** and **Edit** open a form; the fields shown depend on the type (product / machine / supply).
+- **Archive** sets `status = 'archived'` (nothing is deleted). Archived rows stay visible, dimmed, on the
+  Directory page and are hidden from Products / Machines / Supplies. Selecting archived rows turns the
+  button into **Restore**.
+- If the page shows "Not connected to the database", start MySQL in XAMPP and check `DB_HOST`, `DB_PORT`,
+  `DB_NAME`, `DB_USER`, `DB_PASS` in `includes/config.php`.

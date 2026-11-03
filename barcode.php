@@ -58,7 +58,7 @@ $manual = ($tab === 'add' && ($_GET['manual'] ?? '') === '1');
    ---------------------------------------------------------- */
 $types  = ['Product', 'Supply'];
 $errors = [];
-$form   = ['type' => '', 'name' => '', 'batch' => '', 'mfg' => '', 'exp' => '', 'qty' => ''];
+$form   = ['type' => '', 'name' => '', 'dosage' => '', 'batch' => '', 'mfg' => '', 'exp' => '', 'qty' => ''];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tab    = 'add';
@@ -76,6 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Item name is required.';
     } elseif (mb_strlen($form['name']) > 100) {
         $errors[] = 'Item name must be 100 characters or less.';
+    }
+
+    if (mb_strlen($form['dosage']) > 50) {
+        $errors[] = 'Dosage must be 50 characters or less.';
     }
 
     if ($form['batch'] === '') {
@@ -118,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['barcode_added'][] = [
             'type'  => $form['type'],
             'name'  => $form['name'],
+            'dosage' => $form['dosage'],
             'batch' => $form['batch'],
             'mfg'   => $form['mfg'],
             'exp'   => $form['exp'],
@@ -135,37 +140,13 @@ $flash = $_SESSION['barcode_flash'] ?? '';
 unset($_SESSION['barcode_flash']);
 
 $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
+
+// Shared header (top bar + working nav links) and this page's extra stylesheet.
+$pageTitle  = 'Barcode';
+$activePage = 'barcode';
+$extraCss   = ['barcode.css'];
+require_once __DIR__ . '/includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Barcode | DermAve IMS</title>
-  <link rel="stylesheet" href="assets/css/style.css">
-  <link rel="stylesheet" href="assets/css/barcode.css">
-</head>
-<body>
-
-  <header class="topbar">
-    <div class="brand brand--small">
-      <div class="brand__name">DERM<span>AVE</span> IMS</div>
-    </div>
-
-    <!-- TODO: point these links to the real pages once they are built -->
-    <nav class="nav" id="mainNav">
-      <a href="dashboard.php">Dashboard</a>
-      <a href="#">Products</a>
-      <a href="#">Machines</a>
-      <a href="#">Supplies</a>
-      <a href="barcode.php" class="active">Barcode</a>
-    </nav>
-
-    <div class="topbar__user">
-      <?= e($_SESSION['user']) ?>
-      <a href="logout.php">Logout</a>
-    </div>
-  </header>
 
   <main class="content">
     <h1>Barcode</h1>
@@ -192,7 +173,7 @@ $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
         <h2 class="result__title">Item: <span><?= e($sample_item['name']) ?></span></h2>
 
         <div class="table-wrap">
-          <table class="table">
+          <table class="table table--fit">
             <thead>
               <tr>
                 <th>Batch</th>
@@ -267,8 +248,8 @@ $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
           </div>
 
           <div class="form-group">
-            <label for="name">Dosage</label>
-            <input type="text" id="name" name="name" placeholder="e.g. 5mg, 10mg." value="<?= e($form['name']) ?>" required>
+            <label for="dosage">Dosage <span class="muted small">(optional)</span></label>
+            <input type="text" id="dosage" name="dosage" placeholder="e.g. 5mg, 10mg" value="<?= e($form['dosage']) ?>">
           </div>
 
           <div class="form-group">
@@ -303,11 +284,12 @@ $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
           <p class="note">Stored in your session only for now &mdash; cleared when you log out.</p>
 
           <div class="table-wrap">
-            <table class="table">
+            <table class="table table--fit">
               <thead>
                 <tr>
                   <th>Type</th>
                   <th>Item</th>
+                  <th>Dosage</th>
                   <th>Batch</th>
                   <th>Mfg</th>
                   <th>Exp</th>
@@ -320,6 +302,7 @@ $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
                   <tr>
                     <td><?= e($row['type'] ?? '-') ?></td>
                     <td><?= e($row['name']) ?></td>
+                    <td><?= e(($row['dosage'] ?? '') !== '' ? $row['dosage'] : '-') ?></td>
                     <td><?= e($row['batch']) ?></td>
                     <td><?= e(show_date($row['mfg'] ?? '')) ?></td>
                     <td><?= e(show_date($row['exp'])) ?></td>
@@ -336,5 +319,4 @@ $added = array_reverse($_SESSION['barcode_added'] ?? []); // newest first
     <?php endif; ?>
   </main>
 
-</body>
-</html>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

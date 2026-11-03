@@ -11,10 +11,10 @@ $products = get_products();
 
   <main class="content">
     <h1>Products</h1>
-    <p class="subtitle">Items, batches and expiry dates &mdash; placeholder data</p>
+    <p class="subtitle">Products, brands, dosage and expiry dates &mdash; placeholder data</p>
 
     <div class="toolbar">
-      <input type="search" id="tableSearch" placeholder="Search item or batch...">
+      <input type="search" id="tableSearch" placeholder="Search product, brand or type...">
       <select id="statusFilter" aria-label="Filter by status">
         <option value="all">All statuses</option>
         <option value="expired">Expired</option>
@@ -24,13 +24,17 @@ $products = get_products();
     </div>
 
     <div class="table-wrap">
-      <table class="table js-filter-table" id="productsTable">
+      <table class="table table--fit js-filter-table" id="productsTable">
         <thead>
           <tr>
-            <th>Item</th>
-            <th>Batch</th>
-            <th>Expiry</th>
-            <th class="num">Qty</th>
+            <th>Product Name</th>
+            <th>Type</th>
+            <th>Brand</th>
+            <th>Dosage</th>
+            <th>Manufacturing Date</th>
+            <th>Expiration Date</th>
+            <th class="num">Price</th>
+            <th class="num">Quantity</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -39,8 +43,12 @@ $products = get_products();
             <?php [$statusClass, $statusLabel] = product_status($p['expiry']); ?>
             <tr data-status="<?= $statusClass ?>">
               <td><?= htmlspecialchars($p['item']) ?></td>
-              <td><?= htmlspecialchars($p['batch']) ?></td>
-              <td><?= date('M d, Y', strtotime($p['expiry'])) ?></td>
+              <td><?= htmlspecialchars($p['type'] ?: '—') ?></td>
+              <td><?= htmlspecialchars($p['brand'] ?: '—') ?></td>
+              <td><?= htmlspecialchars($p['dosage'] ?: '—') ?></td>
+              <td class="nowrap"><?= table_date($p['mfg']) ?></td>
+              <td class="nowrap"><?= table_date($p['expiry']) ?></td>
+              <td class="num"><?= $p['price'] !== null ? '₱' . number_format($p['price'], 2) : '—' ?></td>
               <td class="num"><?= (int) $p['qty'] ?></td>
               <td><span class="badge badge--<?= $statusClass ?>"><?= $statusLabel ?></span></td>
             </tr>
