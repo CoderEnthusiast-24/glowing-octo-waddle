@@ -25,7 +25,7 @@ if (!empty($_GET['loggedout'])) {
 // The form was submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $password = trim($_POST['password'] ?? '');
 
     if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
@@ -41,7 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $row = $stmt->fetch();
             } catch (Exception $e) {
                 $row = null;
-                $error = 'The users table could not be read. Please contact the system administrator.';
+                $error .= ' [' . $e->getMessage() . ']';
+                //$error = 'The users table could not be read. Please contact the system administrator.';
             }
 
             if (!$error) {
