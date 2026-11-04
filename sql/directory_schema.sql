@@ -231,3 +231,32 @@ VALUES
 
   ('supply', 'Laser Goggles', NULL, 'Laser and Light-Based Treatment Consumables', 'Laser Safety Wear',
    'Wavelength-specific protective eye safety goggles for operators', 'pcs', 5, 2, 1200.00, 'active', 'Verify OD rating against specific laser wavelength');
+
+
+-- ============================================================
+-- DermAve IMS - Users table (login accounts)
+-- Run this in phpMyAdmin AFTER directory_schema.sql
+-- (it uses the same database: dermave_ims).
+--
+-- No accounts are included. Add them in phpMyAdmin:
+--   dermave_ims > users > Insert
+-- Use role = admin or staff, status = active.
+-- ============================================================
+
+USE dermave_ims;
+
+CREATE TABLE IF NOT EXISTS users (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username    VARCHAR(50)  NOT NULL,
+  full_name   VARCHAR(120) NOT NULL,
+  password    VARCHAR(255) NOT NULL,                 -- plain text (school project)
+  role        ENUM('admin', 'staff')     NOT NULL DEFAULT 'staff',
+  status      ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
+  last_login  DATETIME DEFAULT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uq_username (username),
+  INDEX idx_role (role),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

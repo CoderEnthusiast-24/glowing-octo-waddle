@@ -1,18 +1,15 @@
 <?php
 /**
- * Include at the top of any page that requires a logged-in user.
+ * Include at the top of any page that needs a logged-in user.
  *
- * - sends "do not cache" headers (Back button cannot show the page after logout)
- * - redirects to login.php when nobody is logged in
- * - provides $authUser (id, username, full_name, role, status)
+ * - sends the visitor to login.php if nobody is logged in
+ * - gives the page $authUser (id, username, full_name, role, status)
  * - require_admin() blocks staff accounts from admin-only pages
  */
 require_once __DIR__ . '/session.php';
 
-no_cache_headers();
-
 /** Call near the top of an admin-only page. */
-function require_admin(): void
+function require_admin()
 {
     $user = auth_user();
     if ($user && $user['role'] === 'admin') {
@@ -43,13 +40,6 @@ function require_admin(): void
 $authUser = auth_user();
 
 if (!$authUser) {
-    // Remember the page they wanted so login can bring them back to it
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-        app_session_start();
-        $path  = basename((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
-        $query = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY);
-        $_SESSION['return_to'] = $path . ($query !== '' ? '?' . $query : '');
-    }
     header('Location: login.php');
     exit;
 }

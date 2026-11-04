@@ -1,86 +1,107 @@
 <?php
 /**
- * "Forgot?" popup on the login page (JSON).
+ * Forgot password page.
  *
- *   action=check  username                          -> is this an administrator account?
- *   action=reset  username, code, password, confirm -> set a new admin password
+ * Step 1: type your username. If it is an active administrator account,
+ *         the page asks for a new password.
+ * Step 2: type the new password twice. The password is saved in the
+ *         `users` table and you are sent back to the login page.
  *
- * Only ADMIN accounts can reset their own password here, and only with the
- * recovery code from includes/config.php. Everyone else gets the same formal
- * "contact your administrator" notice.
+ * Staff accounts are told to contact the system administrator.
  */
-require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/users.php';
 
-no_cache_headers();
-header('Content-Type: application/json; charset=utf-8');
+$username = trim($_POST['username'] ?? '');
+$error    = '';
+$step     = 1;   // 1 = ask for username, 2 = ask for new password
 
-function out(array $data, int $status = 200): void
-{
-    http_response_code($status);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
-}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $pdo = db();
 
-const CONTACT_ADMIN = 'Please contact your system administrator to have your password reset.';
+    if ($username === '') {
+        $error = 'Please enter your username.';
+    } elseif (!$pdo) {
+        $error = 'Cannot reach the database right now. Please contact the system administrator.';
+    } else {
+        $stmt = $pdo->prepare('SELECT id, role, status FROM users WHERE username = ?');
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    out(['ok' => false, 'message' => 'Invalid request.'], 405);
-}
-if (!csrf_valid($_POST['csrf'] ?? null)) {
-    out(['ok' => false, 'message' => 'This page has expired. Please reload and try again.'], 403);
-}
+        if (!$user || $user['role'] !== 'admin' || $user['status'] !== 'active') {
+            // staff, disabled, or unknown username: same message for all
+            $error = 'Please contact your system administrator to have your password reset.';
+        } elseif (($_POST['action'] ?? '') === 'reset') {
+            // The username is an admin and a new password was sent
+            $step = 2;
+            $password = $_POST['password'] ?? '';
+            $confirm  = $_POST['confirm'] ?? '';
 
-$pdo = auth_db();
-if (!$pdo) {
-    out(['ok' => false, 'message' => 'Cannot reach the database right now. Please contact the system administrator.'], 500);
-}
-
-$action   = (string) ($_POST['action'] ?? '');
-$username = trim((string) ($_POST['username'] ?? ''));
-if ($username === '') {
-    out(['ok' => false, 'message' => 'Please enter your username.']);
-}
-
-try {
-    $stmt = $pdo->prepare("SELECT id, role, status FROM users WHERE username = ? LIMIT 1");
-    $stmt->execute([$username]);
-    $user = $stmt->fetch() ?: null;
-} catch (Throwable $e) {
-    out(['ok' => false, 'message' => 'The users table could not be read. Please contact the system administrator.'], 500);
-}
-
-$recoveryCode = defined('ADMIN_RECOVERY_CODE') ? (string) ADMIN_RECOVERY_CODE : '';
-$isAdmin = $user && $user['role'] === 'admin' && $user['status'] === 'active' && $recoveryCode !== '';
-
-if (!$isAdmin) {
-    // staff, disabled, unknown username, or popup reset turned off: same notice
-    out(['ok' => false, 'notice' => true, 'message' => CONTACT_ADMIN]);
-}
-
-if ($action === 'check') {
-    out(['ok' => true, 'admin' => true]);
-}
-
-if ($action === 'reset') {
-    $code     = (string) ($_POST['code'] ?? '');
-    $password = (string) ($_POST['password'] ?? '');
-    $confirm  = (string) ($_POST['confirm'] ?? '');
-
-    if (!hash_equals($recoveryCode, $code)) {
-        out(['ok' => false, 'message' => 'The recovery code is incorrect.']);
+            $problems = password_problems($password, $confirm);
+            if ($problems) {
+                $error = implode(' ', $problems);
+            } else {
+                user_set_password($pdo, $user['id'], $password);
+                header('Location: login.php?pwchanged=1');
+                exit;
+            }
+        } else {
+            // The username is an admin: show the new password boxes
+            $step = 2;
+        }
     }
-    $problems = password_problems($password, $confirm);
-    if ($problems) {
-        out(['ok' => false, 'message' => implode(' ', $problems)]);
-    }
-
-    try {
-        user_set_password($pdo, (int) $user['id'], $password);
-    } catch (Throwable $e) {
-        out(['ok' => false, 'message' => 'The password could not be saved. Please try again.'], 500);
-    }
-    out(['ok' => true, 'message' => 'Your password has been changed. You can now sign in.']);
 }
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forgot password | DermAve IMS</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="login-page">
 
-out(['ok' => false, 'message' => 'Invalid request.'], 400);
+  <main class="login-card">
+    <h1 class="login-card__title">Forgot password</h1>
+
+    <?php if ($error): ?>
+      <div class="alert"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+
+    <?php if ($step === 1): ?>
+      <p class="muted small" style="margin-bottom:18px">Enter your username to continue.</p>
+    <?php else: ?>
+      <p class="muted small" style="margin-bottom:18px">Choose a new password. Use at least <?= (int) MIN_PASSWORD_LENGTH ?> characters.</p>
+    <?php endif; ?>
+
+    <form method="POST" action="forgot.php">
+      <input type="hidden" name="action" value="<?= $step === 2 ? 'reset' : 'check' ?>">
+
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" maxlength="50"
+               value="<?= htmlspecialchars($username) ?>"<?= $step === 2 ? ' readonly' : '' ?> required>
+      </div>
+
+      <?php if ($step === 2): ?>
+        <div class="form-group">
+          <label for="password">New password</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+
+        <div class="form-group">
+          <label for="confirm">Confirm new password</label>
+          <input type="password" id="confirm" name="confirm" required>
+        </div>
+      <?php endif; ?>
+
+      <div class="form-actions">
+        <a href="login.php" class="btn btn--ghost">Back</a>
+        <button type="submit" class="btn btn--primary"><?= $step === 2 ? 'Change password' : 'Continue' ?></button>
+      </div>
+    </form>
+  </main>
+
+</body>
+</html>

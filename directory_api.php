@@ -9,30 +9,25 @@
  * Always answers JSON: { ok: true, ... } or { ok: false, error|errors }.
  */
 
-// Start the app's own hardened session first (same cookie as the login page)
 require_once __DIR__ . '/includes/session.php';
 app_session_start();
 require_once __DIR__ . '/includes/data.php';
 
-no_cache_headers();
 header('Content-Type: application/json; charset=utf-8');
 
-function respond(array $body, int $code = 200): void
+function respond($body, $code = 200)
 {
     http_response_code($code);
     echo json_encode($body);
     exit;
 }
 
-// auth_user() re-checks the database, so a disabled account is refused immediately
+// Must be logged in
 if (!auth_user()) {
     respond(['ok' => false, 'error' => 'Your session has expired. Please log in again.'], 401);
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(['ok' => false, 'error' => 'POST only.'], 405);
-}
-if (!csrf_valid($_POST['csrf'] ?? null)) {
-    respond(['ok' => false, 'error' => 'Security check failed. Please refresh the page and try again.'], 403);
 }
 
 $pdo = db();
@@ -69,6 +64,6 @@ try {
     }
 
     respond(['ok' => false, 'error' => 'Unknown action.'], 400);
-} catch (Throwable $e) {
+} catch (Exception $e) {
     respond(['ok' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
 }

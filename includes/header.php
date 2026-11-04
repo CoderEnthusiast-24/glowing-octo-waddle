@@ -58,11 +58,6 @@ if ($authUser['role'] === 'admin') {
 
     <div class="topbar__user">
       <span class="user-chip"><?= htmlspecialchars($authUser['full_name']) ?> (<?= htmlspecialchars(ucfirst($authUser['role'])) ?>)</span>
-      <!-- Logout is a POST with a token, so another site cannot sign people out with a link -->
-      <form method="POST" action="logout.php" class="logout-form">
-        <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
-        <button type="submit">Logout</button>
-      </form>
+      <a href="logout.php">Logout</a>
     </div>
   </header>
-
