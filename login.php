@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Exception $e) {
                 $row = null;
                 $error .= ' [' . $e->getMessage() . ']';
-                //$error = 'The users table could not be read. Please contact the system administrator.';
+                $error = 'The users table could not be read. Please contact the system administrator.';
             }
 
             if (!$error) {
