@@ -1,0 +1,155 @@
+/* ==========================================================
+   DermAve IMS - Barcode page styles
+   Loaded after style.css; reuses its colors and variables.
+   ========================================================== */
+
+/* ---------- Tabs (Search / Add) ---------- */
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.tab {
+  padding: 8px 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--white-soft);
+  font-size: 0.92rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+.tab:hover { color: var(--gold); border-color: var(--gold); text-decoration: none; }
+.tab--active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--black);
+  font-weight: 600;
+}
+.tab--active:hover { color: var(--black); }
+
+/* ---------- Scan / type box ---------- */
+.scan-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--black-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.scan-box__icon { flex-shrink: 0; color: var(--gold); }
+.scan-box__input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  background: var(--black);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--white);
+  font: inherit;
+}
+.scan-box__input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(255, 224, 102, 0.15);
+}
+.scan-box__go { padding: 11px 26px; }
+
+.note {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--white-soft);
+}
+
+/* ---------- Result heading + table ---------- */
+.result { margin-top: 28px; }
+.result__title {
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--white-soft);
+}
+.result__title span { color: var(--gold); }
+.result .note { margin: -8px 0 14px; }
+
+/* ---------- Status badges ---------- */
+.status {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.status--ok {
+  color: var(--gold);
+  border-color: var(--gold);
+  background: rgba(255, 224, 102, 0.08);
+}
+.status--expired {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* ---------- Add form ---------- */
+.add-form {
+  max-width: 720px;
+  padding: 24px;
+  background: var(--black-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.add-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  column-gap: 18px;
+}
+.add-form__actions { margin-top: 6px; }
+.add-form__actions .btn { min-width: 140px; }
+
+/* Dropdown matches the text inputs from style.css */
+.add-form select {
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--black);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--white);
+  font: inherit;
+}
+.add-form select:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(255, 224, 102, 0.15);
+}
+.add-form input[type="date"] { color-scheme: dark; }
+
+/* "Manually add the item, press here." line under the scan box */
+.manual-link {
+  margin-top: 22px;
+  font-size: 0.95rem;
+  color: var(--white-soft);
+}
+.manual-link a { font-weight: 600; text-decoration: underline; }
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 18px;
+  font-size: 0.85rem;
+}
+
+/* Success message (the base .alert in style.css is the red error one) */
+.alert--success {
+  background: rgba(255, 224, 102, 0.1);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 600px) {
+  .scan-box { flex-wrap: wrap; }
+  .scan-box__input { flex-basis: calc(100% - 50px); }
+  .scan-box__go { width: 100%; }
+}
