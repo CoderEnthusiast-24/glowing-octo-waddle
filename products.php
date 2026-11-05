@@ -19,6 +19,8 @@ $products = get_products();
         <option value="all">All statuses</option>
         <option value="expired">Expired</option>
         <option value="soon">Expiring soon</option>
+        <option value="low">Low stock</option>
+        <option value="out">Out of stock</option>
         <option value="ok">OK</option>
       </select>
     </div>
@@ -40,8 +42,26 @@ $products = get_products();
         </thead>
         <tbody>
           <?php foreach ($products as $p): ?>
-            <?php [$statusClass, $statusLabel] = product_status($p['expiry']); ?>
-            <tr data-status="<?= $statusClass ?>">
+            <?php
+              // A product can have an expiry warning AND a stock warning, so it may get two badges
+              [$expClass, $expLabel] = product_status($p['expiry']);
+              $stockLevel = supply_status((int) $p['qty'], (int) $p['min']);
+
+              $badges = [];
+              if ($expClass !== 'ok') {
+                  $badges[] = [$expClass, $expLabel];
+              }
+              if ($stockLevel === 'out') {
+                  $badges[] = ['out', 'Out of Stock'];
+              } elseif ($stockLevel === 'low') {
+                  $badges[] = ['low', 'Low Stock'];
+              }
+              if (!$badges) {
+                  $badges[] = ['ok', 'OK'];
+              }
+              $statusAttr = implode(' ', array_column($badges, 0));
+            ?>
+            <tr data-status="<?= $statusAttr ?>">
               <td><?= htmlspecialchars($p['item']) ?></td>
               <td><?= htmlspecialchars($p['type'] ?: '—') ?></td>
               <td><?= htmlspecialchars($p['brand'] ?: '—') ?></td>
@@ -50,7 +70,11 @@ $products = get_products();
               <td class="nowrap"><?= table_date($p['expiry']) ?></td>
               <td class="num"><?= $p['price'] !== null ? '₱' . number_format($p['price'], 2) : '—' ?></td>
               <td class="num"><?= (int) $p['qty'] ?></td>
-              <td><span class="badge badge--<?= $statusClass ?>"><?= $statusLabel ?></span></td>
+              <td>
+                <?php foreach ($badges as [$bClass, $bLabel]): ?>
+                  <span class="badge badge--<?= $bClass ?>"><?= $bLabel ?></span>
+                <?php endforeach; ?>
+              </td>
             </tr>
           <?php endforeach; ?>
         </tbody>

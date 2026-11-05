@@ -14,7 +14,7 @@ function applyFilters() {
 
   rows.forEach((row) => {
     const matchesText = row.textContent.toLowerCase().includes(text);
-    const matchesStatus = status === "all" || row.dataset.status === status;
+    const matchesStatus = status === "all" || (row.dataset.status || "").split(" ").includes(status);
     const show = matchesText && matchesStatus;
     row.hidden = !show;
     if (show) visible++;

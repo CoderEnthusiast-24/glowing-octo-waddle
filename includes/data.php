@@ -318,6 +318,7 @@ function get_products(): array
             'expiry' => $r['expiration_date'] ?? date('Y-m-d', strtotime('+1 year')),
             'price'  => $r['price'] !== null ? (float) $r['price'] : null,
             'qty'    => (int) $r['quantity'],
+            'min'    => (int) ($r['min_stock'] ?? 0),
         ];
     }, $items);
 }
