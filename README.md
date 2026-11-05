@@ -31,6 +31,8 @@ dermave-ims/
 ├── machines.php         # machines page (maintenance dates + status)
 ├── supplies.php         # supplies page (low stock, out of stock, stock list)
 ├── barcode.php          # barcode page (in progress)
+├── stock.php            # stock in / stock out page + recent movements
+├── stock_api.php        # saves a stock movement (JSON)
 ├── users.php            # users page (administrators only, reset passwords)
 ├── includes/
 │   ├── config.php       # app + database settings
@@ -38,12 +40,14 @@ dermave-ims/
 │   ├── session.php      # starts the session, finds the logged-in user
 │   ├── auth.php         # protects pages that need login
 │   ├── users.php        # password checking + saving (used by forgot.php and users.php)
+│   ├── stock.php        # stock_move(): the one place that changes quantity + logs it
 │   ├── header.php       # shared top bar + navigation
 │   ├── footer.php       # shared scripts + closing tags
 │   └── data.php         # placeholder data + status logic (products, machines, supplies)
 ├── sql/
 │   ├── directory_schema.sql   # creates the database and the directory_items table
-│   └── users_schema.sql       # creates the users table
+│   ├── users_schema.sql       # creates the users table
+│   └── stock_movements.sql    # creates the stock_movements log table
 └── assets/
     ├── css/style.css
     ├── css/barcode.css
@@ -52,6 +56,8 @@ dermave-ims/
     ├── js/dashboard.js
     ├── js/directory.js
     ├── js/table-filter.js  # search/filter used by the table pages
+    ├── js/stock.js      # stock page (In / Out form)
+    ├── css/stock.css
     └── img/             # put the DermAve logo here
 ```
 
@@ -74,7 +80,9 @@ dermave-ims/
    your accounts in phpMyAdmin: `dermave_ims` > `users` > **Insert**.
    - `role` is `admin` or `staff`
    - `status` should be `active`
-4. If your XAMPP settings are different, update `DB_HOST`, `DB_PORT`, `DB_USER` and
+4. Import or run `sql/stock_movements.sql` (needs `directory_items` to exist first).
+   It creates the `stock_movements` log used by the Stock page.
+5. If your XAMPP settings are different, update `DB_HOST`, `DB_PORT`, `DB_USER` and
    `DB_PASS` in `includes/config.php`.
 
 Once the database is reachable, `directory.php`, `products.php`, `machines.php` and
@@ -124,6 +132,7 @@ type a new password twice and save. This is also how a staff member gets a new p
 - [x] Supplies
 - [x] Directory
 - [x] Users
+- [x] Stock (in / out)
 - [ ] Barcode
 
 ## Directory
@@ -147,3 +156,11 @@ The Directory page has:
 - Pull before you start working.
 - Commit small, with clear messages.
 - Work on a branch for each page/feature and open a pull request into `main`.
+## Stock in / out
+
+- The **Stock** page lists products and supplies (machines are excluded). Click **In** or **Out** on a row,
+  enter a quantity and a reason, and save.
+- All changes go through `stock_move()` in `includes/stock.php`, which updates `directory_items.quantity`
+  and writes one row to `stock_movements` (type, quantity, balance after, reason, user) in a single transaction.
+- Stock out is refused if it would go below zero, and archived items cannot be moved.
+- The Barcode page and future treatment deductions should call `stock_move()` too, so quantity changes stay in one place.

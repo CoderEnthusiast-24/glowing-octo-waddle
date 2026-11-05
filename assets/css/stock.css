@@ -1,0 +1,12 @@
+/* ==========================================================
+   DermAve IMS - Stock page styles
+   Loaded after style.css; reuses .type-tabs, .modal, .badge, .table.
+   ========================================================== */
+
+.stock-actions .btn {
+  padding: 5px 14px;
+  font-size: 0.8rem;
+}
+.stock-actions .btn + .btn {
+  margin-left: 6px;
+}
