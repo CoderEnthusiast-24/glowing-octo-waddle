@@ -3,10 +3,75 @@
    Loaded after style.css; reuses .type-tabs, .modal, .badge, .table.
    ========================================================== */
 
-.stock-actions .btn {
-  padding: 5px 14px;
-  font-size: 0.8rem;
+/* Product / Supply buttons on the left, In / Out on the top right */
+.stock-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
 }
-.stock-actions .btn + .btn {
-  margin-left: 6px;
+.stock-bar .type-tabs {
+  margin-bottom: 0;
+}
+.stock-bar__actions {
+  display: flex;
+  gap: 10px;
+}
+.stock-bar__actions .btn {
+  min-width: 90px;
+  text-align: center;
+}
+
+/* Name box with suggestions */
+.ac {
+  position: relative;
+}
+.ac__list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin-top: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--black-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  padding: 4px 0;
+}
+.ac__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 0.88rem;
+  color: var(--white);
+  cursor: pointer;
+}
+.ac__item small {
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--white-soft);
+}
+.ac__item.is-active {
+  background: rgba(255, 224, 102, 0.12);
+  color: var(--gold);
+}
+.ac__empty {
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  color: var(--white-soft);
+}
+.ac__hint {
+  display: block;
+  min-height: 1em;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--gold);
 }
