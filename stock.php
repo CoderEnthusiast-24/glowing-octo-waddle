@@ -45,13 +45,16 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
     <?php endif; ?>
     <div class="alert alert--success" id="flash" hidden></div>
 
-    <div class="toolbar">
-      <input type="search" id="tableSearch" placeholder="Search item or category...">
-    </div>
+    <div class="stock-bar">
+      <div class="type-tabs" id="typeTabs" role="group" aria-label="Item type">
+        <button type="button" class="btn btn--ghost type-tab is-active" data-type="product" aria-pressed="true">Product</button>
+        <button type="button" class="btn btn--ghost type-tab" data-type="supply" aria-pressed="false">Supply</button>
+      </div>
 
-    <div class="type-tabs" id="typeTabs" role="group" aria-label="Item type">
-      <button type="button" class="btn btn--ghost type-tab is-active" data-type="product" aria-pressed="true">Product</button>
-      <button type="button" class="btn btn--ghost type-tab" data-type="supply" aria-pressed="false">Supply</button>
+      <div class="stock-bar__actions">
+        <button type="button" class="btn btn--primary js-move" data-move="in"<?= $dbOk ? '' : ' disabled' ?>>In</button>
+        <button type="button" class="btn btn--ghost js-move" data-move="out"<?= $dbOk ? '' : ' disabled' ?>>Out</button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -63,7 +66,6 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
             <th class="num">In Stock</th>
             <th class="num">Min</th>
             <th>Status</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -86,10 +88,6 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
               <td class="num"><span class="qty-num"><?= $qty ?></span><?= $r['unit'] ? ' ' . htmlspecialchars($r['unit']) : '' ?></td>
               <td class="num"><?= $r['min_stock'] !== null ? $min : '—' ?></td>
               <td><span class="badge badge--<?= $lvl ?>"><?= $levelLabels[$lvl] ?></span></td>
-              <td class="nowrap stock-actions">
-                <button type="button" class="btn btn--primary js-move" data-move="in"<?= $dbOk ? '' : ' disabled' ?>>In</button>
-                <button type="button" class="btn btn--ghost js-move" data-move="out"<?= $dbOk ? '' : ' disabled' ?>>Out</button>
-              </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
@@ -135,13 +133,21 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
       <div class="modal__backdrop" data-close></div>
       <div class="modal__card">
         <h2 id="moveTitle">Stock in</h2>
-        <p class="muted small" id="moveItem" style="margin-bottom:14px"></p>
         <div class="alert" id="moveError" hidden></div>
         <form id="moveForm" novalidate>
           <input type="hidden" id="m_csrf" value="<?= htmlspecialchars($_SESSION['csrf']) ?>">
           <input type="hidden" id="m_id">
           <input type="hidden" id="m_type">
 
+          <label>Name
+            <div class="ac">
+              <input type="text" id="m_name" maxlength="255" autocomplete="off" required
+                     role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="m_suggest"
+                     placeholder="Start typing an item name…">
+              <div class="ac__list" id="m_suggest" role="listbox" hidden></div>
+            </div>
+            <span class="ac__hint" id="m_hint"></span>
+          </label>
           <label>Quantity
             <input type="number" id="m_qty" min="1" step="1" required>
           </label>
