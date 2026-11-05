@@ -1,6 +1,7 @@
 /* ==========================================================
    DermAve IMS - Barcode page styles
-   Loaded after style.css; reuses its colors and variables.
+   Loaded after style.css; reuses its colors, .badge and
+   .alert--success classes.
    ========================================================== */
 
 /* ---------- Tabs (Search / Add) ---------- */
@@ -63,7 +64,7 @@
 /* ---------- Result heading + table ---------- */
 .result { margin-top: 28px; }
 .result__title {
-  margin-bottom: 14px;
+  margin-bottom: 6px;
   font-size: 0.85rem;
   font-weight: 500;
   letter-spacing: 1px;
@@ -71,31 +72,66 @@
   color: var(--white-soft);
 }
 .result__title span { color: var(--gold); }
-.result .note { margin: -8px 0 14px; }
+.result .note { margin: 0 0 14px; }
 
-/* ---------- Status badges ---------- */
-.status {
-  display: inline-block;
-  padding: 3px 12px;
-  border-radius: 999px;
-  border: 1px solid;
-  font-size: 0.75rem;
-  font-weight: 600;
+/* Item name + total on the left/right */
+.item-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
-.status--ok {
+.item-summary__total {
+  flex: none;
+  text-align: right;
+  line-height: 1.1;
+}
+.item-summary__total strong {
+  display: block;
+  font-size: 2rem;
+  font-weight: 300;
   color: var(--gold);
-  border-color: var(--gold);
-  background: rgba(255, 224, 102, 0.08);
 }
-.status--expired {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: rgba(255, 107, 107, 0.1);
+.item-summary__total span {
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--white-soft);
+}
+.item-summary--add { margin: 22px 0 14px; }
+
+/* Link under the batch table */
+.manual-link {
+  margin-top: 18px;
+  font-size: 0.92rem;
+}
+.manual-link a { font-weight: 600; }
+
+/* ---------- "Not found" prompt ---------- */
+.notfound {
+  margin-top: 28px;
+  padding: 24px;
+  text-align: center;
+  background: var(--black-card);
+  border: 1px dashed var(--gold-deep);
+  border-radius: var(--radius);
+}
+.notfound h2 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.notfound h2 span { color: var(--gold); }
+.notfound p {
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  color: var(--white-soft);
 }
 
 /* ---------- Add form ---------- */
 .add-form {
   max-width: 720px;
+  margin-top: 8px;
   padding: 24px;
   background: var(--black-card);
   border: 1px solid var(--border);
@@ -103,10 +139,11 @@
 }
 .add-form__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   column-gap: 18px;
 }
-.add-form__actions { margin-top: 6px; }
+.add-form .field--full { grid-column: 1 / -1; }
+.add-form__actions { margin-top: 14px; }
 .add-form__actions .btn { min-width: 140px; }
 
 /* Dropdown matches the text inputs from style.css */
@@ -126,30 +163,12 @@
 }
 .add-form input[type="date"] { color-scheme: dark; }
 
-/* "Manually add the item, press here." line under the scan box */
-.manual-link {
-  margin-top: 22px;
-  font-size: 0.95rem;
-  color: var(--white-soft);
-}
-.manual-link a { font-weight: 600; text-decoration: underline; }
-
-.back-link {
-  display: inline-block;
-  margin-bottom: 18px;
-  font-size: 0.85rem;
-}
-
-/* Success message (the base .alert in style.css is the red error one) */
-.alert--success {
-  background: rgba(255, 224, 102, 0.1);
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
 /* ---------- Small screens ---------- */
 @media (max-width: 600px) {
   .scan-box { flex-wrap: wrap; }
   .scan-box__input { flex-basis: calc(100% - 50px); }
   .scan-box__go { width: 100%; }
+  .add-form__grid { grid-template-columns: 1fr; }
+  .item-summary { flex-direction: column; }
+  .item-summary__total { text-align: left; }
 }

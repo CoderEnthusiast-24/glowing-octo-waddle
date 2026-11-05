@@ -369,9 +369,9 @@ function directory_type_fields(): array
 {
     $common = ['name', 'brand', 'category', 'subcategory', 'unit', 'quantity', 'notes'];
     return [
-        'product' => array_merge($common, ['dosage', 'min_stock', 'price', 'batch_number', 'manufacturing_date', 'expiration_date']),
+        'product' => array_merge($common, ['barcode', 'dosage', 'min_stock', 'price', 'batch_number', 'manufacturing_date', 'expiration_date']),
         'machine' => array_merge($common, ['last_maintenance', 'next_maintenance']),
-        'supply'  => array_merge($common, ['min_stock', 'price', 'expiration_date']),
+        'supply'  => array_merge($common, ['barcode', 'min_stock', 'price', 'expiration_date']),
     ];
 }
 
@@ -403,6 +403,7 @@ function directory_validate(array $in, array &$errors): array
         'dosage'       => ['Dosage', 120],
         'unit'         => ['Unit', 40],
         'batch_number' => ['Batch number', 80],
+        'barcode'      => ['Barcode', 64],
         'notes'        => ['Notes', 2000],
     ];
     $data = ['item_type' => $type];
@@ -416,6 +417,10 @@ function directory_validate(array $in, array &$errors): array
     }
     if ($data['name'] === null) {
         $errors[] = 'Name is required.';
+    }
+
+    if ($data['barcode'] !== null && !preg_match('/^[\x20-\x7E]+$/', $data['barcode'])) {
+        $errors[] = 'Barcode can only use normal letters, numbers and symbols.';
     }
 
     // whole numbers
@@ -474,7 +479,7 @@ function directory_validate(array $in, array &$errors): array
 
     // blank out columns that don't apply to this type
     $allowed = $map[$type];
-    foreach (['brand', 'category', 'subcategory', 'dosage', 'unit', 'quantity', 'min_stock', 'price',
+    foreach (['barcode','brand', 'category', 'subcategory', 'dosage', 'unit', 'quantity', 'min_stock', 'price',
               'batch_number', 'manufacturing_date', 'expiration_date', 'last_maintenance',
               'next_maintenance', 'notes'] as $col) {
         if (!in_array($col, $allowed, true)) {
@@ -494,38 +499,52 @@ function directory_validate(array $in, array &$errors): array
 
 /**
  * Insert a new item ($id = null) or update an existing one.
+ * Items that have batches always get their quantity / expiry recalculated
+ * from those batches afterwards.
  *
  * @return int|null  the item id, or null if an update targeted a missing item
+ * @throws InvalidArgumentException if the barcode belongs to another item
  */
 function directory_save(PDO $pdo, array $data, ?int $id = null): ?int
 {
-    $cols = ['item_type', 'name', 'brand', 'category', 'subcategory', 'dosage', 'unit', 'quantity',
+    $cols = ['item_type', 'barcode', 'name', 'brand', 'category', 'subcategory', 'dosage', 'unit', 'quantity',
              'min_stock', 'price', 'batch_number', 'manufacturing_date', 'expiration_date',
              'last_maintenance', 'next_maintenance', 'notes'];
-
+ 
     $params = [];
     foreach ($cols as $c) {
         $params[$c] = $data[$c] ?? null;
     }
-
+ 
+    // A barcode can only belong to one item
+    if (!empty($params['barcode'])) {
+        $dup = $pdo->prepare('SELECT id FROM directory_items WHERE barcode = ? AND id <> ?');
+        $dup->execute([$params['barcode'], $id ?? 0]);
+        if ($dup->fetchColumn()) {
+            throw new InvalidArgumentException('That barcode is already used by another item.');
+        }
+    }
+ 
     if ($id === null) {
         $sql = 'INSERT INTO directory_items (' . implode(', ', $cols) . ') VALUES (:' . implode(', :', $cols) . ')';
         $pdo->prepare($sql)->execute($params);
         return (int) $pdo->lastInsertId();
     }
-
+ 
     $exists = $pdo->prepare('SELECT 1 FROM directory_items WHERE id = ?');
     $exists->execute([$id]);
     if (!$exists->fetchColumn()) {
         return null;
     }
-
+ 
     $set = implode(', ', array_map(fn($c) => "$c = :$c", $cols));
     $params['id'] = $id;
     $pdo->prepare("UPDATE directory_items SET $set WHERE id = :id")->execute($params);
+ 
+    // Quantity / expiry come from the batches when the item has any
+    directory_recalc_item($pdo, $id);
     return $id;
 }
-
 /**
  * Archive or restore items.
  *
@@ -624,4 +643,252 @@ function dashboard_stats(): array
 
     $s['expiring_soon'] = $s['expiring_30'] + $s['expiring_60'] + $s['expiring_90'];
     return $s;
+}
+
+/* ------------------------------------------------------------------
+ * Barcode + batches
+ * ----------------------------------------------------------------*/
+ 
+/** True if $v is a real calendar date written as YYYY-MM-DD. */
+function is_valid_ymd(string $v): bool
+{
+    $d = DateTime::createFromFormat('Y-m-d', $v);
+    return $d && $d->format('Y-m-d') === $v;
+}
+ 
+/**
+ * Find a product or supply by barcode (archived ones included, so the
+ * caller can tell the user). Returns null when not found / no database.
+ */
+function get_item_by_barcode(string $barcode): ?array
+{
+    $pdo = db();
+    if (!$pdo || $barcode === '') {
+        return null;
+    }
+    $stmt = $pdo->prepare("SELECT * FROM directory_items WHERE barcode = ? AND item_type IN ('product', 'supply') LIMIT 1");
+    $stmt->execute([$barcode]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+ 
+/** All batches of one item, soonest expiry first. */
+function get_batches(int $itemId): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return [];
+    }
+    $stmt = $pdo->prepare('SELECT * FROM item_batches WHERE item_id = ? ORDER BY expiration_date, batch_number');
+    $stmt->execute([$itemId]);
+    return $stmt->fetchAll();
+}
+ 
+/** The most recently saved batches, with their item name and type. */
+function get_recent_batches(int $limit = 10): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return [];
+    }
+    $limit = max(1, min(100, $limit));
+    $sql = 'SELECT b.*, i.name, i.item_type
+            FROM item_batches b
+            JOIN directory_items i ON i.id = b.item_id
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT ' . $limit;
+    return $pdo->query($sql)->fetchAll();
+}
+ 
+/**
+ * Save one batch. If the item already has a batch with this number, the
+ * quantity is added to it (restock); otherwise a new batch row is created.
+ *
+ * @param  array $b  batch_number, manufacturing_date, expiration_date, quantity
+ * @return string    'created' | 'updated'
+ */
+function batch_save(PDO $pdo, int $itemId, array $b): string
+{
+    $find = $pdo->prepare('SELECT id FROM item_batches WHERE item_id = ? AND batch_number = ?');
+    $find->execute([$itemId, $b['batch_number']]);
+    $existingId = $find->fetchColumn();
+ 
+    if ($existingId) {
+        $pdo->prepare('UPDATE item_batches SET quantity = quantity + ? WHERE id = ?')
+            ->execute([$b['quantity'], $existingId]);
+        return 'updated';
+    }
+ 
+    $pdo->prepare('INSERT INTO item_batches (item_id, batch_number, manufacturing_date, expiration_date, quantity)
+                   VALUES (?, ?, ?, ?, ?)')
+        ->execute([$itemId, $b['batch_number'], $b['manufacturing_date'], $b['expiration_date'], $b['quantity']]);
+    return 'created';
+}
+ 
+/**
+ * Recalculate an item's totals from its batches:
+ *   quantity        = sum of all batch quantities
+ *   expiration_date = soonest expiry among batches that still have stock
+ * Items with no batches keep whatever was typed in manually.
+ */
+function directory_recalc_item(PDO $pdo, int $itemId): void
+{
+    $count = $pdo->prepare('SELECT COUNT(*) FROM item_batches WHERE item_id = ?');
+    $count->execute([$itemId]);
+    if ((int) $count->fetchColumn() === 0) {
+        return;
+    }
+ 
+    $pdo->prepare(
+        'UPDATE directory_items SET
+            quantity = (SELECT COALESCE(SUM(quantity), 0) FROM item_batches WHERE item_id = ?),
+            expiration_date = (SELECT MIN(expiration_date) FROM item_batches WHERE item_id = ? AND quantity > 0)
+         WHERE id = ?'
+    )->execute([$itemId, $itemId, $itemId]);
+}
+ 
+/**
+ * Barcode "Add" form: validate, then save a batch.
+ * Known barcode  -> the batch is added to that item.
+ * Unknown barcode -> the item is created first (needs type + name).
+ *
+ * Expects keys: barcode, batch, mfg, exp, qty (+ type, name, dosage for new items).
+ *
+ * @param  array $errors  filled with human-readable messages
+ * @return array|null     ['message' => ..., 'item_id' => ...] or null on error
+ */
+function barcode_add_batch(PDO $pdo, array $in, array &$errors): ?array
+{
+    $errors = [];
+    $get = fn(string $k): string => trim((string) ($in[$k] ?? ''));
+ 
+    // ---- barcode / existing item ----
+    $barcode   = $get('barcode');
+    $barcodeOk = false;
+    $item      = null;
+ 
+    if ($barcode === '') {
+        $errors[] = 'Barcode is required.';
+    } elseif (strlen($barcode) > 64 || !preg_match('/^[\x20-\x7E]+$/', $barcode)) {
+        $errors[] = 'Barcode must be 64 characters or less and use normal letters, numbers or symbols.';
+    } else {
+        $barcodeOk = true;
+        $item = get_item_by_barcode($barcode);
+        if ($item && $item['status'] === 'archived') {
+            $errors[] = 'This item is archived. Restore it in the Directory first.';
+        }
+    }
+ 
+    // ---- new item details (only when the barcode is new) ----
+    $isNew    = $barcodeOk && !$item;
+    $itemData = null;
+    if ($isNew) {
+        $type = $get('type');
+        if (!in_array($type, ['product', 'supply'], true)) {
+            $errors[] = 'Please choose Product or Supply.';
+        } else {
+            $itemErrors = [];
+            $itemData = directory_validate([
+                'item_type' => $type,
+                'name'      => $get('name'),
+                'dosage'    => $get('dosage'),
+                'barcode'   => $barcode,
+                'quantity'  => '0',
+            ], $itemErrors);
+            $errors = array_merge($errors, $itemErrors);
+        }
+    }
+ 
+    // ---- batch fields ----
+    $batchNo = $get('batch');
+    if ($batchNo === '') {
+        $errors[] = 'Batch number is required.';
+    } elseif (mb_strlen($batchNo) > 50) {
+        $errors[] = 'Batch number must be 50 characters or less.';
+    }
+ 
+    $mfg = $get('mfg');
+    $exp = $get('exp');
+    $mfgOk = $expOk = false;
+ 
+    if ($mfg === '') {
+        $errors[] = 'Manufacturing date is required.';
+    } elseif (!is_valid_ymd($mfg)) {
+        $errors[] = 'Manufacturing date is not a valid date.';
+    } elseif ($mfg > date('Y-m-d')) {
+        $errors[] = 'Manufacturing date cannot be in the future.';
+    } else {
+        $mfgOk = true;
+    }
+ 
+    if ($exp === '') {
+        $errors[] = 'Expiry date is required.';
+    } elseif (!is_valid_ymd($exp)) {
+        $errors[] = 'Expiry date is not a valid date.';
+    } else {
+        $expOk = true;
+    }
+    if ($mfgOk && $expOk && $exp <= $mfg) {
+        $errors[] = 'Expiry date must be after the manufacturing date.';
+    }
+ 
+    $qtyRaw = $get('qty');
+    $qty = 0;
+    if ($qtyRaw === '') {
+        $errors[] = 'Quantity is required.';
+    } elseif (filter_var($qtyRaw, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]]) === false) {
+        $errors[] = 'Quantity must be a whole number from 0 to 100,000.';
+    } else {
+        $qty = (int) $qtyRaw;
+    }
+ 
+    if ($errors) {
+        return null;
+    }
+ 
+    // ---- save (all or nothing) ----
+    try {
+        $pdo->beginTransaction();
+ 
+        if ($isNew) {
+            $itemId = (int) directory_save($pdo, $itemData);
+            $name   = $itemData['name'];
+        } else {
+            $itemId = (int) $item['id'];
+            $name   = $item['name'];
+        }
+ 
+        $how = batch_save($pdo, $itemId, [
+            'batch_number'       => $batchNo,
+            'manufacturing_date' => $mfg,
+            'expiration_date'    => $exp,
+            'quantity'           => $qty,
+        ]);
+        directory_recalc_item($pdo, $itemId);
+ 
+        $total = $pdo->prepare('SELECT quantity FROM directory_items WHERE id = ?');
+        $total->execute([$itemId]);
+        $totalQty = (int) $total->fetchColumn();
+ 
+        $pdo->commit();
+    } catch (InvalidArgumentException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $errors[] = $e->getMessage();
+        return null;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $errors[] = 'Could not save: ' . $e->getMessage();
+        return null;
+    }
+ 
+    $message = ($isNew ? 'Created ' . $name . '. ' : '')
+             . ($how === 'created' ? 'Added batch ' : 'Added stock to batch ') . $batchNo
+             . ' (' . $qty . ')' . ($isNew ? '' : ' to ' . $name)
+             . '. Total in stock: ' . $totalQty . '.';
+ 
+    return ['message' => $message, 'item_id' => $itemId];
 }
