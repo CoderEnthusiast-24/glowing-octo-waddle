@@ -912,3 +912,27 @@ a:hover {
   text-decoration: underline;
 }
 .user-chip { opacity: 0.85; font-size: 0.9em; }
+
+/* ==========================================================
+   DASHBOARD: section headings + inventory-by-type cards
+   ========================================================== */
+.section-title {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.cards + .section-title {
+  margin-top: 32px;
+}
+.card--type {
+  min-height: 130px;
+}
+.card__note + .card__note {
+  margin-top: 4px;
+}
+.card__note strong {
+  color: var(--gold);
+}

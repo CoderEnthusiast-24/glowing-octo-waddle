@@ -544,3 +544,84 @@ function directory_set_status(PDO $pdo, array $ids, string $status): int
     $stmt->execute(array_merge([$status], $ids));
     return $stmt->rowCount();
 }
+
+/* ------------------------------------------------------------------
+ * Dashboard numbers
+ * ----------------------------------------------------------------*/
+
+/**
+ * Counts for the dashboard cards. Archived items are never counted.
+ *
+ *  products / machines / supplies : how many different items of each type
+ *  low_stock       : products + supplies with some left, but at or below min_stock
+ *  out_of_stock    : products + supplies with none left
+ *  expired         : products + supplies already past their expiration date
+ *  expiring_30/60/90 : days left 0-30, 31-60, 61-90 (the ranges do not overlap)
+ *  expiring_soon   : the three ranges added together
+ *  maintenance_due : machines overdue or due within 30 days
+ *  maintenance_overdue : machines already past their next maintenance date
+ */
+function dashboard_stats(): array
+{
+    $today = new DateTimeImmutable('today');
+
+    // Days from today until $date (negative = already past), or null if no date
+    $daysLeft = function (?string $date) use ($today): ?int {
+        if (!$date) {
+            return null;
+        }
+        return (int) $today->diff(new DateTimeImmutable($date))->format('%r%a');
+    };
+
+    $s = [
+        'products' => 0, 'machines' => 0, 'supplies' => 0,
+        'low_stock' => 0, 'out_of_stock' => 0,
+        'expired' => 0, 'expiring_30' => 0, 'expiring_60' => 0, 'expiring_90' => 0,
+        'maintenance_due' => 0, 'maintenance_overdue' => 0,
+    ];
+    $countKey = ['product' => 'products', 'machine' => 'machines', 'supply' => 'supplies'];
+
+    foreach (get_directory_items() as $r) {      // active items only
+        $type = $r['item_type'];
+        $s[$countKey[$type]]++;
+
+        // Machines: maintenance
+        if ($type === 'machine') {
+            $days = $daysLeft($r['next_maintenance'] ?? null);
+            if ($days !== null && $days < 0) {
+                $s['maintenance_overdue']++;
+            }
+            if ($days !== null && $days <= 30) {
+                $s['maintenance_due']++;
+            }
+            continue;
+        }
+
+        // Products and supplies: stock level
+        $qty = (int) $r['quantity'];
+        $min = $r['min_stock'] ?? null;
+        if ($qty <= 0) {
+            $s['out_of_stock']++;
+        } elseif ($min !== null && $qty <= (int) $min) {
+            $s['low_stock']++;
+        }
+
+        // Products and supplies: expiry
+        $days = $daysLeft($r['expiration_date'] ?? null);
+        if ($days === null) {
+            continue;
+        }
+        if ($days < 0) {
+            $s['expired']++;
+        } elseif ($days <= 30) {
+            $s['expiring_30']++;
+        } elseif ($days <= 60) {
+            $s['expiring_60']++;
+        } elseif ($days <= 90) {
+            $s['expiring_90']++;
+        }
+    }
+
+    $s['expiring_soon'] = $s['expiring_30'] + $s['expiring_60'] + $s['expiring_90'];
+    return $s;
+}
