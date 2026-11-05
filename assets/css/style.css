@@ -429,7 +429,7 @@ a:hover {
 }
 
 /* Expired rows get a gold edge so they stand out */
-.table tbody tr[data-status="expired"] td:first-child {
+.table tbody tr[data-status~="expired"] td:first-child {
   box-shadow: inset 3px 0 0 var(--gold);
 }
 
@@ -475,7 +475,7 @@ a:hover {
   background: var(--gold);
   border-color: var(--gold);
 }
-.table tbody tr[data-status="overdue"] td:first-child {
+.table tbody tr[data-status~="overdue"] td:first-child {
   box-shadow: inset 3px 0 0 var(--gold);
 }
 
@@ -774,7 +774,7 @@ a:hover {
   background: rgba(255, 224, 102, 0.08);
   border-color: var(--gold-deep);
 }
-.table tbody tr[data-status="out"] td:first-child {
+.table tbody tr[data-status~="out"] td:first-child {
   box-shadow: inset 3px 0 0 var(--gold);
 }
 
