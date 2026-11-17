@@ -1,4 +1,14 @@
 <?php
+/**
+ * DermAve IMS - Products page (read-only list)
+ *
+ * v2 database: quantity and expiry come from the item's batches.
+ *   qty    = total of its active batches (v_item_stock.total_qty)
+ *   expiry = the soonest expiry among batches that still have stock (next_expiry)
+ * An item that does not track expiry, or has no stock in any batch, has no expiry
+ * date, so it only gets a stock badge. Manufacturing dates now belong to individual
+ * batches, so they are no longer shown here (see the Barcode page for batches).
+ */
 $pageTitle  = 'Products';
 $activePage = 'products';
 $pageScript = 'table-filter.js';
@@ -11,7 +21,7 @@ $products = get_products();
 
   <main class="content">
     <h1>Products</h1>
-    <p class="subtitle">Products, brands, dosage and expiry dates &mdash; placeholder data</p>
+    <p class="subtitle">Products, brands, dosage, stock and the next expiry date</p>
 
     <div class="toolbar">
       <input type="search" id="tableSearch" placeholder="Search product, brand or type...">
@@ -33,8 +43,7 @@ $products = get_products();
             <th>Type</th>
             <th>Brand</th>
             <th>Dosage</th>
-            <th>Manufacturing Date</th>
-            <th>Expiration Date</th>
+            <th>Next Expiry</th>
             <th class="num">Price</th>
             <th class="num">Quantity</th>
             <th>Status</th>
@@ -43,8 +52,13 @@ $products = get_products();
         <tbody>
           <?php foreach ($products as $p): ?>
             <?php
-              // A product can have an expiry warning AND a stock warning, so it may get two badges
-              [$expClass, $expLabel] = product_status($p['expiry']);
+              // A product can have an expiry warning AND a stock warning, so it may get two badges.
+              // No expiry date (not tracked, or nothing in stock) means no expiry badge.
+              if (!empty($p['expiry'])) {
+                  [$expClass, $expLabel] = product_status($p['expiry']);
+              } else {
+                  [$expClass, $expLabel] = ['ok', 'OK'];
+              }
               $stockLevel = supply_status((int) $p['qty'], (int) $p['min']);
 
               $badges = [];
@@ -66,13 +80,12 @@ $products = get_products();
               <td><?= htmlspecialchars($p['type'] ?: '—') ?></td>
               <td><?= htmlspecialchars($p['brand'] ?: '—') ?></td>
               <td><?= htmlspecialchars($p['dosage'] ?: '—') ?></td>
-              <td class="nowrap"><?= table_date($p['mfg']) ?></td>
-              <td class="nowrap"><?= table_date($p['expiry']) ?></td>
+              <td class="nowrap"><?= table_date($p['expiry'] ?? null) ?></td>
               <td class="num"><?= $p['price'] !== null ? '₱' . number_format($p['price'], 2) : '—' ?></td>
-              <td class="num"><?= (int) $p['qty'] ?></td>
+              <td class="num"><?= (int) $p['qty'] ?><?= !empty($p['unit']) ? ' ' . htmlspecialchars($p['unit']) : '' ?></td>
               <td>
                 <?php foreach ($badges as [$bClass, $bLabel]): ?>
-                  <span class="badge badge--<?= $bClass ?>"><?= $bLabel ?></span>
+                  <span class="badge badge--<?= $bClass ?>"><?= htmlspecialchars($bLabel) ?></span>
                 <?php endforeach; ?>
               </td>
             </tr>

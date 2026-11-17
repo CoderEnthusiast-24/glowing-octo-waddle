@@ -22,6 +22,9 @@ function app_session_start()
  * The logged-in user, read from the database every time, so a disabled
  * account stops working right away.
  * Returns an array (id, username, full_name, role, status) or null.
+ *
+ * v2: the role now lives in the `roles` table, so it is joined in and
+ * returned under the same key ('role') the rest of the app already uses.
  */
 function auth_user()
 {
@@ -36,7 +39,12 @@ function auth_user()
         return null;
     }
 
-    $stmt = $pdo->prepare('SELECT id, username, full_name, role, status FROM users WHERE id = ?');
+    $stmt = $pdo->prepare(
+        'SELECT u.id, u.username, u.full_name, r.name AS role, u.status
+         FROM users u
+         JOIN roles r ON r.id = u.role_id
+         WHERE u.id = ?'
+    );
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch();
 

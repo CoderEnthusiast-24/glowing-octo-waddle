@@ -3,6 +3,10 @@
  * DermAve IMS - Stock page
  * Stock In / Stock Out for products and supplies, plus a log of recent movements.
  * The actual change is made by stock_move() (includes/stock.php) through stock_api.php.
+ *
+ * v2: stock lives in batches. The pop-up asks for a batch on Stock In
+ * (existing batch number, or a new one with an expiry date) and offers an
+ * optional batch on Stock Out (default: earliest expiry first).
  */
 
 $pageTitle  = 'Stock';
@@ -29,6 +33,34 @@ $items = array_values(array_filter(
 ));
 
 $movements = $dbOk ? get_recent_movements($pdo, 25) : [];
+
+// Data the pop-up needs: reasons for In / Out, and each item's active batches
+$stockData = ['reasons' => ['in' => [], 'out' => []], 'batches' => new stdClass()];
+if ($dbOk) {
+    foreach (['in', 'out'] as $dir) {
+        $stockData['reasons'][$dir] = array_column(get_movement_reasons($pdo, $dir), 'name');
+    }
+
+    $batches = [];
+    $rows = $pdo->query(
+        "SELECT b.id, b.item_id, b.batch_number, b.expiry_date, b.qty_on_hand
+           FROM item_batches b
+           JOIN items i ON i.id = b.item_id
+          WHERE b.status = 'active' AND i.status = 'active'
+          ORDER BY (b.expiry_date IS NULL), b.expiry_date, b.id"
+    )->fetchAll();
+    foreach ($rows as $b) {
+        $batches[$b['item_id']][] = [
+            'id'  => (int) $b['id'],
+            'no'  => $b['batch_number'],
+            'qty' => (int) $b['qty_on_hand'],
+            'exp' => $b['expiry_date'],
+        ];
+    }
+    if ($batches) {
+        $stockData['batches'] = $batches;
+    }
+}
 
 $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock'];
 ?>
@@ -81,9 +113,10 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
               data-name="<?= htmlspecialchars($r['name']) ?>"
               data-qty="<?= $qty ?>"
               data-unit="<?= htmlspecialchars($r['unit'] ?? '') ?>"
+              data-tracks="<?= (int) $r['tracks_batches'] ?>"
               data-status="<?= $lvl ?>"
             >
-              <td><strong><?= htmlspecialchars($r['name']) ?></strong></td>
+              <td><strong><?= htmlspecialchars($r['name']) ?></strong><?= $r['dosage'] ? ' <span class="muted small">' . htmlspecialchars($r['dosage']) . '</span>' : '' ?></td>
               <td><?= htmlspecialchars($r['category'] ?? '—') ?></td>
               <td class="num"><span class="qty-num"><?= $qty ?></span><?= $r['unit'] ? ' ' . htmlspecialchars($r['unit']) : '' ?></td>
               <td class="num"><?= $r['min_stock'] !== null ? $min : '—' ?></td>
@@ -102,6 +135,7 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
           <tr>
             <th>When</th>
             <th>Item</th>
+            <th>Batch</th>
             <th>Type</th>
             <th class="num">Qty</th>
             <th class="num">Balance</th>
@@ -111,22 +145,27 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
         </thead>
         <tbody>
           <?php foreach ($movements as $m): ?>
+            <?php $isIn = (int) $m['quantity_change'] > 0; ?>
             <tr>
               <td class="nowrap"><?= htmlspecialchars(date('M d, Y g:i A', strtotime($m['created_at']))) ?></td>
               <td><?= htmlspecialchars($m['item_name']) ?></td>
-              <td><span class="badge badge--<?= $m['movement_type'] === 'in' ? 'ok' : 'low' ?>"><?= $m['movement_type'] === 'in' ? 'Stock in' : 'Stock out' ?></span></td>
-              <td class="num"><?= $m['movement_type'] === 'in' ? '+' : '−' ?><?= (int) $m['quantity'] ?></td>
+              <td><?= htmlspecialchars($m['batch_number'] ?? '—') ?></td>
+              <td><span class="badge badge--<?= $isIn ? 'ok' : 'low' ?>"><?= $isIn ? 'Stock in' : 'Stock out' ?></span></td>
+              <td class="num"><?= $isIn ? '+' : '−' ?><?= (int) $m['quantity'] ?></td>
               <td class="num"><?= (int) $m['balance_after'] ?></td>
               <td><?= htmlspecialchars($m['reason']) ?></td>
               <td><?= htmlspecialchars($m['user_name'] ?? '—') ?></td>
             </tr>
           <?php endforeach; ?>
           <?php if (!$movements): ?>
-            <tr><td colspan="7" class="muted">No movements recorded yet.</td></tr>
+            <tr><td colspan="8" class="muted">No movements recorded yet.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
     </div>
+
+    <!-- Reasons and batches for the pop-up (read by stock.js) -->
+    <script type="application/json" id="stockData"><?= json_encode($stockData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?></script>
 
     <!-- Stock in / out modal -->
     <div class="modal" id="moveModal" hidden>
@@ -148,12 +187,35 @@ $levelLabels = ['out' => 'Out of Stock', 'low' => 'Low Stock', 'ok' => 'In Stock
             </div>
             <span class="ac__hint" id="m_hint"></span>
           </label>
+
+          <!-- Stock IN of a batch-tracked item: which batch -->
+          <div id="m_batchIn" hidden>
+            <label>Batch number
+              <input type="text" id="m_batch" maxlength="80" list="m_batchList" autocomplete="off"
+                     placeholder="Pick an existing batch or type a new one">
+              <datalist id="m_batchList"></datalist>
+              <span class="ac__hint" id="m_batchHint"></span>
+            </label>
+            <div id="m_newBatch" hidden>
+              <label>Manufacturing date (optional)
+                <input type="date" id="m_mfg">
+              </label>
+              <label>Expiry date
+                <input type="date" id="m_exp">
+              </label>
+            </div>
+          </div>
+
+          <!-- Stock OUT of a batch-tracked item: optional batch -->
+          <label id="m_batchOut" hidden>Batch
+            <select id="m_batchSel"></select>
+          </label>
+
           <label>Quantity
             <input type="number" id="m_qty" min="1" step="1" required>
           </label>
           <label>Reason
-            <input type="text" id="m_reason" maxlength="150" list="reasonList" required autocomplete="off">
-            <datalist id="reasonList"></datalist>
+            <select id="m_reason" required></select>
           </label>
 
           <div class="form-actions">

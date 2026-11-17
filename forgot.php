@@ -4,7 +4,7 @@
  *
  * Step 1: type your username. If it is an active administrator account,
  *         the page asks for a new password.
- * Step 2: type the new password twice. The password is saved in the
+ * Step 2: type the new password twice. The password is saved (hashed) in the
  *         `users` table and you are sent back to the login page.
  *
  * Staff accounts are told to contact the system administrator.
@@ -24,7 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!$pdo) {
         $error = 'Cannot reach the database right now. Please contact the system administrator.';
     } else {
-        $stmt = $pdo->prepare('SELECT id, role, status FROM users WHERE username = ?');
+        // v2: the role name comes from the `roles` table
+        $stmt = $pdo->prepare(
+            'SELECT u.id, r.name AS role, u.status
+             FROM users u
+             JOIN roles r ON r.id = u.role_id
+             WHERE u.username = ?'
+        );
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 

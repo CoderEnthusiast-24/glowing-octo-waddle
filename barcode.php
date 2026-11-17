@@ -3,16 +3,17 @@
  * DermAve IMS - Barcode page
  *
  *   ?tab=search&code=XXXX   look up an item by barcode and list its batches
- *   ?tab=add                scan a barcode, then add a batch to it
- *   ?tab=add&code=XXXX      barcode known -> add a batch (or create the item)
+ *   ?tab=add                scan a barcode, then add stock to it
+ *   ?tab=add&code=XXXX      barcode known -> add a batch (or stock), or create the item
  *
  * Scanners type the code and press Enter, which submits the scan box
  * (a normal GET form), so no JavaScript is needed.
  *
- * Quantity and expiry on directory_items are recalculated from item_batches
- * (see directory_recalc_item() in includes/data.php).
+ * v2 database: items that track batches get a batch row; items that do not
+ * (some supplies) just get the quantity added. Every addition is logged in
+ * stock_movements by barcode_add_batch() (includes/data.php) through stock_move().
  */
-require_once __DIR__ . '/includes/auth.php';   // redirects to login if needed
+require_once __DIR__ . '/includes/auth.php';   // redirects to login if needed; sets $authUser
 require_once __DIR__ . '/includes/data.php';
 
 /* ----------------------------------------------------------
@@ -26,10 +27,15 @@ function e($value)
 /** [css class, label] for one batch row. */
 function batch_badge(array $b): array
 {
+    // A batch that is quarantined or disposed shows that instead of an expiry label
+    $status = $b['status'] ?? 'active';
+    if ($status !== 'active') {
+        return ['out', ucfirst($status)];
+    }
     if ((int) $b['quantity'] <= 0) {
         return ['out', 'Empty'];
     }
-    [$class, $label] = product_status($b['expiration_date']);
+    [$class, $label] = product_status($b['expiration_date'] ?? null);
     return [$class, $label];
 }
 
@@ -60,7 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!$pdo) {
         $errors[] = 'Cannot connect to the database: ' . (db_error() ?? 'unknown reason');
     } else {
-        $result = barcode_add_batch($pdo, $_POST, $errors);
+        // The user id is saved on the stock movement
+        $result = barcode_add_batch($pdo, $_POST, $errors, (int) $authUser['id']);
         if ($result) {
             $_SESSION['barcode_flash'] = $result['message'];
             // Redirect so refreshing does not re-submit; ready for the next scan.
@@ -80,10 +87,13 @@ $item    = null;
 $batches = [];
 if ($dbOk && $code !== '' && strlen($code) <= 64) {
     $item = get_item_by_barcode($code);
-    if ($item) {
+    if ($item && (int) $item['tracks_batches'] === 1) {
         $batches = get_batches((int) $item['id']);
     }
 }
+// Does the scanned item keep batches? (a new, unknown barcode always starts with one)
+$tracksBatches = !$item || (int) $item['tracks_batches'] === 1;
+
 $recent = ($tab === 'add' && $dbOk) ? get_recent_batches(10) : [];
 
 $pageTitle  = 'Barcode';
@@ -97,7 +107,7 @@ $barcodeIcon = '<svg class="scan-box__icon" viewBox="0 0 24 24" width="28" heigh
 
   <main class="content">
     <h1>Barcode</h1>
-    <p class="subtitle">Look up an item by barcode, or add a new batch</p>
+    <p class="subtitle">Look up an item by barcode, or add stock to it</p>
 
     <?php if (!$dbOk): ?>
       <div class="alert">
@@ -142,7 +152,9 @@ $barcodeIcon = '<svg class="scan-box__icon" viewBox="0 0 24 24" width="28" heigh
               </div>
             </div>
 
-            <?php if ($batches): ?>
+            <?php if (!$tracksBatches): ?>
+              <p class="note">This item does not track batches. Its stock is kept as a single total.</p>
+            <?php elseif ($batches): ?>
               <div class="table-wrap">
                 <table class="table table--fit">
                   <thead>
@@ -172,7 +184,7 @@ $barcodeIcon = '<svg class="scan-box__icon" viewBox="0 0 24 24" width="28" heigh
             <?php endif; ?>
 
             <p class="manual-link">
-              <a href="barcode.php?tab=add&amp;code=<?= urlencode($item['barcode']) ?>">+ Add a batch to this item</a>
+              <a href="barcode.php?tab=add&amp;code=<?= urlencode($item['barcode']) ?>"><?= $tracksBatches ? '+ Add a batch to this item' : '+ Add stock to this item' ?></a>
             </p>
           </section>
         <?php elseif (strlen($code) > 64): ?>
@@ -215,22 +227,23 @@ $barcodeIcon = '<svg class="scan-box__icon" viewBox="0 0 24 24" width="28" heigh
       </form>
 
       <?php if ($dbOk && $code === ''): ?>
-        <p class="note">Scan the item's barcode first. If it already exists you will add a batch to it; otherwise you can create it.</p>
+        <p class="note">Scan the item's barcode first. If it already exists you will add stock to it; otherwise you can create it.</p>
       <?php endif; ?>
 
-      <!-- Step 2: batch details -->
+      <!-- Step 2: stock details -->
       <?php if ($dbOk && $code !== ''): ?>
         <?php $archived = $item && $item['status'] === 'archived'; ?>
 
         <?php if ($item): ?>
           <div class="item-summary item-summary--add">
             <div>
-              <h2 class="result__title">Adding a batch to: <span><?= e($item['name']) ?></span></h2>
+              <h2 class="result__title"><?= $tracksBatches ? 'Adding a batch to' : 'Adding stock to' ?>: <span><?= e($item['name']) ?></span></h2>
               <p class="note">
                 <?= e(ucfirst($item['item_type'])) ?>
                 <?= $item['dosage'] ? ' &middot; ' . e($item['dosage']) : '' ?>
                 &middot; Barcode <?= e($item['barcode']) ?>
                 &middot; <?= (int) $item['quantity'] ?> in stock now
+                <?= !$tracksBatches ? ' &middot; does not track batches' : '' ?>
               </p>
             </div>
           </div>
@@ -264,29 +277,38 @@ $barcodeIcon = '<svg class="scan-box__icon" viewBox="0 0 24 24" width="28" heigh
               </div>
             <?php endif; ?>
 
-            <div class="form-group">
-              <label for="batch">Batch Number</label>
-              <input type="text" id="batch" name="batch" placeholder="e.g. LT-123" value="<?= e($form['batch']) ?>" maxlength="50" required
-                     <?= $item ? 'autofocus' : '' ?>>
-            </div>
+            <?php if ($tracksBatches): ?>
+              <div class="form-group">
+                <label for="batch">Batch Number</label>
+                <input type="text" id="batch" name="batch" placeholder="e.g. LT-123" value="<?= e($form['batch']) ?>" maxlength="50" required
+                       <?= $item ? 'autofocus' : '' ?>>
+              </div>
+            <?php endif; ?>
 
             <div class="form-group">
               <label for="qty">Quantity</label>
-              <input type="number" id="qty" name="qty" min="0" max="100000" step="1" placeholder="0" value="<?= e($form['qty']) ?>" required>
+              <input type="number" id="qty" name="qty" min="1" max="100000" step="1" placeholder="1" value="<?= e($form['qty']) ?>" required
+                     <?= ($item && !$tracksBatches) ? 'autofocus' : '' ?>>
             </div>
 
-            <div class="form-group">
-              <label for="mfg">Manufacturing Date</label>
-              <input type="date" id="mfg" name="mfg" value="<?= e($form['mfg']) ?>" required>
-            </div>
+            <?php if ($tracksBatches): ?>
+              <div class="form-group">
+                <label for="mfg">Manufacturing Date</label>
+                <input type="date" id="mfg" name="mfg" value="<?= e($form['mfg']) ?>" required>
+              </div>
 
-            <div class="form-group">
-              <label for="exp">Expiry Date</label>
-              <input type="date" id="exp" name="exp" value="<?= e($form['exp']) ?>" required>
-            </div>
+              <div class="form-group">
+                <label for="exp">Expiry Date</label>
+                <input type="date" id="exp" name="exp" value="<?= e($form['exp']) ?>" required>
+              </div>
+            <?php endif; ?>
           </div>
 
-          <p class="note">Using a batch number that already exists on this item adds the quantity to that batch.</p>
+          <?php if ($tracksBatches): ?>
+            <p class="note">Using a batch number that already exists on this item adds the quantity to that batch.</p>
+          <?php else: ?>
+            <p class="note">This item does not track batches, so the quantity is simply added to its stock total.</p>
+          <?php endif; ?>
 
           <div class="add-form__actions">
             <button type="submit" class="btn btn--primary"<?= $archived ? ' disabled' : '' ?>>Add</button>

@@ -25,9 +25,16 @@ function password_problems($password, $confirm)
     return $errors;
 }
 
-/** Save a new password for a user (stored as plain text in the `password` column). */
+/**
+ * Save a new password for a user.
+ *
+ * v2: only a bcrypt hash is stored (users.password_hash), never the password.
+ * A reset also clears any login lockout so the person can sign in right away.
+ */
 function user_set_password($pdo, $userId, $password)
 {
-    $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
-    $stmt->execute([$password, $userId]);
+    $stmt = $pdo->prepare(
+        'UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?'
+    );
+    $stmt->execute([password_hash($password, PASSWORD_DEFAULT), $userId]);
 }

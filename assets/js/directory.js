@@ -1,10 +1,15 @@
 /**
  * DermAve IMS - Directory page behaviour
  * - Product / Machine / Supply buttons (each shows its own columns)
- * - Search
+ * - Search (name, brand, category, barcode, ...)
  * - Clickable column headers (sort + filter menus)
  * - Click a row to select it (Ctrl/Cmd + click to select several) → enables Edit / Archive
  * - Add / Edit modal + Archive / Restore, saved to MySQL through directory_api.php
+ *
+ * v2 database notes:
+ * - Item ids and machine ids overlap, so Archive / Restore send the item_type too.
+ * - Archived rows cannot be edited; restore them first.
+ * - The type (and Track batches / Track expiry) can only be chosen when adding.
  */
 
 (function () {
@@ -52,8 +57,14 @@
   }
 
   function updateActionButtons() {
-    const n = selectedRows().length;
-    btnEdit.disabled = n !== 1;
+    const sel = selectedRows();
+    const n = sel.length;
+
+    // Edit: exactly one row, and it must not be archived
+    const archivedPick = n === 1 && sel[0].dataset.status === 'archived';
+    btnEdit.disabled = n !== 1 || archivedPick;
+    btnEdit.title = archivedPick ? 'Restore this item before editing it.' : '';
+
     btnArchive.disabled = n === 0;
     // If every selected row is already archived, the button restores them instead
     btnArchive.textContent = archiveMode() === 'restore' ? 'Restore' : 'Archive';
@@ -73,8 +84,9 @@
       // only the rows of the chosen type (Product / Machine / Supply)
       const matchesType = row.dataset.item_type === currentType;
 
-      // text search across whole row
-      const matchesText = !text || row.textContent.toLowerCase().includes(text);
+      // text search (name, brand, category, barcode, ... built by directory.php)
+      const haystack = row.dataset.search || row.textContent.toLowerCase();
+      const matchesText = !text || haystack.includes(text);
 
       // column filters
       let matchesFilters = true;
@@ -284,11 +296,40 @@
   const formError = document.getElementById('formError');
   const btnSave = document.getElementById('btnSave');
   const typeSelect = document.getElementById('f_item_type');
+  const idField = document.getElementById('f_id');
+  const tracksBatches = document.getElementById('f_tracks_batches');
+  const tracksExpiry = document.getElementById('f_tracks_expiry');
+  const categorySelect = document.getElementById('f_category_id');
+
+  // Form fields that are filled from a row's JSON when editing (element id = "f_" + name)
   const FIELDS = [
-    'name', 'brand', 'category', 'subcategory', 'dosage', 'quantity', 'unit', 'min_stock',
-    'price', 'batch_number', 'manufacturing_date', 'expiration_date',
-    'last_maintenance', 'next_maintenance', 'notes',
+    'name', 'brand_id', 'unit_id', 'dosage', 'min_stock', 'price', 'barcode',
+    'description', 'notes',
+    'unit_label', 'model', 'serial_number', 'status', 'purchase_date', 'warranty_until',
+    'maintenance_interval_days', 'last_maintenance', 'next_maintenance',
   ];
+
+  // The category dropdown only offers categories that apply to the chosen type
+  const allCategoryOptions = categorySelect ? Array.from(categorySelect.options) : [];
+
+  function syncCategoryOptions(alsoKeep) {
+    if (!categorySelect) return;
+    const type = typeSelect.value;
+    const keep = categorySelect.value;
+
+    categorySelect.innerHTML = '';
+    allCategoryOptions.forEach((opt) => {
+      const applies = opt.dataset.applies;
+      const fits = !applies || applies === 'all' || applies === type;
+      // when editing, never drop the item's current category
+      if (fits || (alsoKeep != null && opt.value === String(alsoKeep))) {
+        categorySelect.appendChild(opt);
+      }
+    });
+
+    categorySelect.value = keep;
+    if (categorySelect.selectedIndex < 0) categorySelect.value = '';
+  }
 
   // Show only the fields that apply to the chosen type
   function syncTypeFields() {
@@ -296,6 +337,14 @@
     form.querySelectorAll('[data-for]').forEach((el) => {
       el.hidden = !el.dataset.for.split(' ').includes(type);
     });
+    syncCategoryOptions();
+
+    // New item: products start with batches + expiry on, supplies start with both off
+    if (!idField.value) {
+      const on = type === 'product';
+      tracksBatches.checked = on;
+      tracksExpiry.checked = on;
+    }
   }
   typeSelect?.addEventListener('change', syncTypeFields);
 
@@ -314,22 +363,35 @@
     modalTitle.textContent = mode === 'edit' ? 'Edit item' : 'Add item';
     form.reset();
     showFormErrors([]);
-    document.getElementById('f_id').value = '';
+    idField.value = '';
 
-    if (mode === 'edit' && row) {
+    // The type and the "Track ..." choices are fixed once the item exists
+    const editing = mode === 'edit' && row;
+    typeSelect.disabled = !!editing;
+    tracksBatches.disabled = !!editing;
+    tracksExpiry.disabled = !!editing;
+
+    if (editing) {
       let item = {};
       try { item = JSON.parse(row.dataset.item || '{}'); } catch (e) {}
-      document.getElementById('f_id').value = item.id || row.dataset.id || '';
-      typeSelect.value = item.item_type || 'product';
+
+      idField.value = item.id || row.dataset.id || '';
+      typeSelect.value = item.item_type || row.dataset.item_type || 'product';
+      syncTypeFields();
+      syncCategoryOptions(item.category_id);
+
+      categorySelect.value = item.category_id != null ? String(item.category_id) : '';
       FIELDS.forEach((f) => {
         const el = document.getElementById('f_' + f);
         if (el) el.value = item[f] ?? '';
       });
+      tracksBatches.checked = String(item.tracks_batches) === '1';
+      tracksExpiry.checked = String(item.tracks_expiry) === '1';
     } else {
       // Add: start with the type that is currently showing
       typeSelect.value = currentType;
+      syncTypeFields();
     }
-    syncTypeFields();
     document.getElementById('f_name').focus();
   }
 
@@ -348,7 +410,7 @@
 
   btnEdit?.addEventListener('click', () => {
     const rows = selectedRows();
-    if (rows.length === 1) openModal('edit', rows[0]);
+    if (rows.length === 1 && rows[0].dataset.status !== 'archived') openModal('edit', rows[0]);
   });
 
   /* ---------- archive / restore ---------- */
@@ -362,7 +424,13 @@
     if (!confirm(`${verb} ${targets.length} selected item(s)?`)) return;
 
     btnArchive.disabled = true;
-    const res = await callApi({ action: mode, ids: targets.map((r) => r.dataset.id) });
+    // ids from items and machines overlap, so say which type they belong to
+    // (only rows of the showing type can be selected)
+    const res = await callApi({
+      action: mode,
+      item_type: currentType,
+      ids: targets.map((r) => r.dataset.id),
+    });
     if (res.ok) {
       reloadWithMessage(res.message);
     } else {
@@ -378,6 +446,23 @@
     btnSave.disabled = true;
 
     const fields = Object.fromEntries(new FormData(form).entries());
+
+    // Don't send fields that belong to a different type (their boxes are hidden)
+    form.querySelectorAll('[data-for]').forEach((el) => {
+      if (el.hidden) {
+        el.querySelectorAll('input, select, textarea').forEach((c) => delete fields[c.name]);
+      }
+    });
+
+    // A disabled select is left out of FormData, so add the type back in
+    fields.item_type = typeSelect.value;
+
+    // Track batches / expiry are only sent when adding a product or supply
+    if (!fields.id && fields.item_type !== 'machine') {
+      fields.tracks_batches = tracksBatches.checked ? '1' : '0';
+      fields.tracks_expiry = tracksExpiry.checked ? '1' : '0';
+    }
+
     fields.action = 'save';
     const res = await callApi(fields);
 

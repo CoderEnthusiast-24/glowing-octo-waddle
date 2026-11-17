@@ -3,7 +3,13 @@
  * DermAve IMS - Stock API (used by assets/js/stock.js)
  *
  * POST actions:
- *   move - item_id, type (in|out), qty, reason  -> stock_move()
+ *   move - item_id, type (in|out), qty, reason (a movement_reasons name)
+ *          optional: batch_id            (a specific batch, in or out)
+ *                    batch_number, mfg_date, expiry_date   (stock IN to a batch by number;
+ *                                          an existing number gets the quantity added,
+ *                                          a new number creates the batch)
+ *   -> stock_move()
+ * Stock OUT without batch_id takes from the batches that expire first.
  * Always answers JSON: { ok: true, ... } or { ok: false, error }.
  */
 
@@ -57,7 +63,22 @@ try {
         respond(['ok' => false, 'error' => 'Quantity must be a whole number from 1 to 1,000,000.'], 422);
     }
 
-    $res = stock_move($pdo, $itemId, $type, (int) $qtyRaw, $reason, (int) $user['id']);
+    // Optional batch details (stock_move() checks them)
+    $opts    = [];
+    $batchId = (int) ($_POST['batch_id'] ?? 0);
+    if ($batchId > 0) {
+        $opts['batch_id'] = $batchId;
+    }
+    $batchNo = trim((string) ($_POST['batch_number'] ?? ''));
+    if ($type === 'in' && $batchNo !== '') {
+        $opts['batch'] = [
+            'batch_number' => $batchNo,
+            'mfg_date'     => trim((string) ($_POST['mfg_date'] ?? '')),
+            'expiry_date'  => trim((string) ($_POST['expiry_date'] ?? '')),
+        ];
+    }
+
+    $res = stock_move($pdo, $itemId, $type, (int) $qtyRaw, $reason, (int) $user['id'], null, $opts);
     if (!$res['ok']) {
         respond($res, 422);
     }
@@ -69,6 +90,6 @@ try {
         'after'   => $res['after'],
         'message' => "$verb: {$res['item']} ({$res['before']} → {$res['after']}).",
     ]);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     respond(['ok' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
 }

@@ -1,8 +1,11 @@
 /**
  * DermAve IMS - Stock page
  * - Product / Supply buttons filter the table
- * - "In" / "Out" buttons (top right) open a pop-up asking for name, quantity and reason
+ * - "In" / "Out" buttons (top right) open a pop-up asking for name, batch, quantity and reason
  * - The name box suggests items while you type (products and supplies)
+ * - Batch-tracked items (all products): Stock In needs a batch number (existing, or a new one
+ *   with an expiry date); Stock Out can pick a batch or leave it on "earliest expiry first"
+ * - Reasons come from the database (movement_reasons) through #stockData
  * - Saved through stock_api.php, then the page reloads with a message
  */
 (function () {
@@ -26,13 +29,24 @@
   const hint = document.getElementById('m_hint');
   const qtyField = document.getElementById('m_qty');
   const reasonField = document.getElementById('m_reason');
-  const reasonList = document.getElementById('reasonList');
   const csrf = document.getElementById('m_csrf').value;
 
-  const REASONS = {
-    in: ['Restock', 'Returned', 'Stock count correction'],
-    out: ['Used in treatment', 'Damaged', 'Expired', 'Lost', 'Stock count correction'],
-  };
+  // batch controls
+  const batchIn = document.getElementById('m_batchIn');
+  const batchField = document.getElementById('m_batch');
+  const batchList = document.getElementById('m_batchList');
+  const batchHint = document.getElementById('m_batchHint');
+  const newBatch = document.getElementById('m_newBatch');
+  const mfgField = document.getElementById('m_mfg');
+  const expField = document.getElementById('m_exp');
+  const batchOut = document.getElementById('m_batchOut');
+  const batchSel = document.getElementById('m_batchSel');
+
+  // Reasons + batches printed by stock.php
+  let DATA = { reasons: { in: [], out: [] }, batches: {} };
+  try {
+    DATA = JSON.parse(document.getElementById('stockData').textContent) || DATA;
+  } catch (e) {}
 
   // Every product and supply on the page, for the name suggestions
   const items = Array.from(tbody.querySelectorAll('tr')).map((r) => ({
@@ -41,7 +55,29 @@
     type: r.dataset.item_type,
     qty: parseInt(r.dataset.qty, 10) || 0,
     unit: r.dataset.unit || '',
+    tracks: r.dataset.tracks === '1',
   }));
+
+  function selectedItem() {
+    return items.find((x) => x.id === idField.value) || null;
+  }
+
+  function batchesOf(it) {
+    return (it && DATA.batches[it.id]) || [];
+  }
+
+  function fmtDate(d) {
+    if (!d) return 'no expiry';
+    const dt = new Date(d + 'T00:00:00');
+    return isNaN(dt) ? d : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function isExpired(d) {
+    if (!d) return false;
+    const today = new Date();
+    const iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    return d < iso;
+  }
 
   /* ---------- product / supply buttons ---------- */
   let currentType = 'product';
@@ -84,6 +120,63 @@
     }
   } catch (e) {}
 
+  /* ---------- batch fields (depend on the chosen item and In / Out) ---------- */
+  function existingBatchByNumber(it, no) {
+    const n = no.trim().toLowerCase();
+    return n ? batchesOf(it).find((b) => b.no.toLowerCase() === n) || null : null;
+  }
+
+  // Show / hide the "new batch" dates while a batch number is typed
+  function updateNewBatch() {
+    const it = selectedItem();
+    const no = batchField.value.trim();
+    const existing = it ? existingBatchByNumber(it, no) : null;
+    newBatch.hidden = !no || !!existing;
+    batchHint.textContent = existing
+      ? 'Existing batch: ' + existing.qty + ' in stock, expires ' + fmtDate(existing.exp)
+      : no ? 'New batch' : '';
+  }
+
+  function updateBatchUI() {
+    const it = selectedItem();
+    const tracked = !!it && it.tracks;
+    const isIn = typeField.value === 'in';
+
+    batchIn.hidden = !(tracked && isIn);
+    batchOut.hidden = !(tracked && !isIn);
+
+    // Stock In: suggest the item's existing batch numbers
+    batchList.innerHTML = '';
+    if (tracked && isIn) {
+      batchesOf(it).forEach((b) => {
+        const o = document.createElement('option');
+        o.value = b.no;
+        batchList.appendChild(o);
+      });
+    }
+
+    // Stock Out: "automatic" or one specific batch that still has stock
+    batchSel.innerHTML = '';
+    const auto = document.createElement('option');
+    auto.value = '';
+    auto.textContent = 'Earliest expiry first (automatic)';
+    batchSel.appendChild(auto);
+    if (tracked && !isIn) {
+      batchesOf(it)
+        .filter((b) => b.qty > 0)
+        .forEach((b) => {
+          const o = document.createElement('option');
+          o.value = String(b.id);
+          o.textContent = b.no + ' — ' + b.qty + ' left, ' + (isExpired(b.exp) ? 'EXPIRED ' : 'expires ') + fmtDate(b.exp);
+          batchSel.appendChild(o);
+        });
+    }
+
+    updateNewBatch();
+  }
+
+  batchField.addEventListener('input', updateNewBatch);
+
   /* ---------- name autocomplete ---------- */
   let matches = [];
   let active = -1;
@@ -93,10 +186,11 @@
   }
 
   function updateHint() {
-    const it = items.find((x) => x.id === idField.value);
+    const it = selectedItem();
     hint.textContent = it ? stockText(it) : '';
     // For stock out you cannot take more than what is there
     qtyField.max = it && typeField.value === 'out' ? String(it.qty) : '';
+    updateBatchUI();
   }
 
   function closeSuggest() {
@@ -117,7 +211,7 @@
     idField.value = it.id;
     closeSuggest();
     updateHint();
-    qtyField.focus();
+    (it.tracks ? (typeField.value === 'in' ? batchField : qtyField) : qtyField).focus();
   }
 
   function renderSuggest() {
@@ -211,12 +305,21 @@
     hint.textContent = '';
     qtyField.max = '';
     closeSuggest();
-    reasonList.innerHTML = '';
-    REASONS[type].forEach((r) => {
+
+    // reasons for this direction, from the database
+    reasonField.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Choose a reason…';
+    reasonField.appendChild(ph);
+    (DATA.reasons[type] || []).forEach((r) => {
       const o = document.createElement('option');
       o.value = r;
-      reasonList.appendChild(o);
+      o.textContent = r;
+      reasonField.appendChild(o);
     });
+
+    updateBatchUI();
     modal.hidden = false;
     nameField.focus();
   }
@@ -246,15 +349,40 @@
     }
     if (!idField.value) return showError('Please choose an item from the suggestions.');
 
-    const it = items.find((x) => x.id === idField.value);
+    const it = selectedItem();
+    const isIn = typeField.value === 'in';
     const qty = parseInt(qtyField.value, 10);
     if (!qty || qty < 1 || String(qty) !== qtyField.value.trim()) {
       return showError('Quantity must be a whole number of at least 1.');
     }
-    if (typeField.value === 'out' && it && qty > it.qty) {
+    if (!reasonField.value) return showError('Please choose a reason.');
+
+    // batch checks
+    const fields = {};
+    if (it && it.tracks) {
+      if (isIn) {
+        const no = batchField.value.trim();
+        if (!no) return showError('Enter a batch number (pick an existing one or type a new one).');
+        fields.batch_number = no;
+        if (!existingBatchByNumber(it, no)) {
+          if (!expField.value) return showError('A new batch needs an expiry date.');
+          if (mfgField.value && expField.value <= mfgField.value) {
+            return showError('Expiry date must be after the manufacturing date.');
+          }
+          fields.mfg_date = mfgField.value;
+          fields.expiry_date = expField.value;
+        }
+      } else if (batchSel.value) {
+        fields.batch_id = batchSel.value;
+        const b = batchesOf(it).find((x) => String(x.id) === batchSel.value);
+        if (b && qty > b.qty) {
+          return showError('Not enough stock in batch ' + b.no + ' (' + b.qty + ' left).');
+        }
+      }
+    }
+    if (!isIn && it && qty > it.qty) {
       return showError('Not enough stock for ' + it.name + ' (' + stockText(it).replace(' in stock', '') + ' left).');
     }
-    if (!reasonField.value.trim()) return showError('Please give a reason.');
 
     saveBtn.disabled = true;
     const body = new URLSearchParams({
@@ -263,7 +391,8 @@
       item_id: idField.value,
       type: typeField.value,
       qty: String(qty),
-      reason: reasonField.value.trim(),
+      reason: reasonField.value,
+      ...fields,
     });
 
     let res;
