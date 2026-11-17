@@ -44,10 +44,15 @@ if ($pdo && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// All accounts for the table
+// All accounts for the table (v2: the role name comes from the `roles` table)
 $users = [];
 if ($pdo) {
-    $users = $pdo->query('SELECT id, username, full_name, role, status, last_login FROM users ORDER BY role, username')->fetchAll();
+    $users = $pdo->query(
+        'SELECT u.id, u.username, u.full_name, r.name AS role, u.status, u.last_login
+         FROM users u
+         JOIN roles r ON r.id = u.role_id
+         ORDER BY r.name, u.username'
+    )->fetchAll();
 }
 
 // The account whose form should be showing (if any)

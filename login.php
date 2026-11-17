@@ -25,7 +25,7 @@ if (!empty($_GET['loggedout'])) {
 // The form was submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $password = $_POST['password'] ?? '';      // not trimmed: spaces can be part of a password
 
     if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
@@ -35,30 +35,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$pdo) {
             $error = 'Cannot reach the database right now. Please contact the system administrator.';
         } else {
+            $row = null;
             try {
-                $stmt = $pdo->prepare('SELECT id, password, status FROM users WHERE username = ?');
+                $stmt = $pdo->prepare(
+                    'SELECT id, password_hash, status, failed_attempts, locked_until
+                     FROM users WHERE username = ?'
+                );
                 $stmt->execute([$username]);
                 $row = $stmt->fetch();
             } catch (Exception $e) {
-                $row = null;
-                $error .= ' [' . $e->getMessage() . ']';
                 $error = 'The users table could not be read. Please contact the system administrator.';
             }
 
             if (!$error) {
-                // Correct username + correct password + active account = logged in
-                if ($row && $row['password'] === $password && $row['status'] === 'active') {
+                // 1. Temporarily locked after too many wrong passwords?
+                $lockedUntil = ($row && $row['locked_until']) ? strtotime($row['locked_until']) : 0;
+                if ($lockedUntil > time()) {
+                    $minutes = (int) ceil(($lockedUntil - time()) / 60);
+                    $error = 'Too many failed attempts. Try again in ' . $minutes . ' minute' . ($minutes === 1 ? '' : 's') . '.';
+                }
+                // 2. Correct username + correct password + active account = logged in
+                elseif ($row && $row['status'] === 'active' && password_verify($password, $row['password_hash'])) {
+                    session_regenerate_id(true);               // new session id after login
                     $_SESSION['user_id'] = (int) $row['id'];
 
-                    $update = $pdo->prepare('UPDATE users SET last_login = ? WHERE id = ?');
-                    $update->execute([date('Y-m-d H:i:s'), $row['id']]);
+                    // Keep the hash up to date if PHP's default algorithm / cost has changed
+                    if (password_needs_rehash($row['password_hash'], PASSWORD_DEFAULT)) {
+                        $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+                            ->execute([password_hash($password, PASSWORD_DEFAULT), $row['id']]);
+                    }
+
+                    // Clear the failed-attempt counter and record the login time
+                    $pdo->prepare('UPDATE users SET last_login = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?')
+                        ->execute([date('Y-m-d H:i:s'), $row['id']]);
 
                     header('Location: dashboard.php');
                     exit;
                 }
+                // 3. Wrong password for a real, active account: count it, lock after the limit
+                else {
+                    if ($row && $row['status'] === 'active') {
+                        $attempts = (int) $row['failed_attempts'] + 1;
+                        if ($attempts >= MAX_FAILED_ATTEMPTS) {
+                            $pdo->prepare('UPDATE users SET failed_attempts = 0, locked_until = ? WHERE id = ?')
+                                ->execute([date('Y-m-d H:i:s', time() + LOCKOUT_MINUTES * 60), $row['id']]);
+                        } else {
+                            $pdo->prepare('UPDATE users SET failed_attempts = ? WHERE id = ?')
+                                ->execute([$attempts, $row['id']]);
+                        }
+                    }
 
-                // Same message for every kind of failure
-                $error = 'Invalid username or password.';
+                    // Same message for every kind of failure
+                    $error = 'Invalid username or password.';
+                }
             }
         }
     }
