@@ -59,6 +59,10 @@ if ($authUser['role'] === 'admin') {
 
     <div class="topbar__user">
       <span class="user-chip"><?= htmlspecialchars($authUser['full_name']) ?> (<?= htmlspecialchars(ucfirst($authUser['role'])) ?>)</span>
-      <a href="logout.php">Logout</a>
+      <!-- Logout is a POST with a CSRF token, so other sites cannot trigger it -->
+      <form method="POST" action="logout.php" class="logout-form" style="margin-left:12px">
+        <?= csrf_field() ?>
+        <button type="submit" style="color:var(--gold)">Logout</button>
+      </form>
     </div>
   </header>

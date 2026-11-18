@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/session.php';
 
 app_session_start();
+no_cache_headers();
 
 // Already logged in? Go to the dashboard.
 if (auth_user()) {
@@ -16,7 +17,7 @@ $username = '';
 // Messages shown after coming from another page
 if (!empty($_GET['loggedout'])) {
     $notice = 'You have been signed out.';
-} elseif (!empty($_GET['expired'])) {
+} elseif (!empty($_GET['expired']) || session_expired_flag()) {
     $notice = 'Your session has ended. Please sign in again.';
 } elseif (!empty($_GET['pwchanged'])) {
     $notice = 'Your password has been changed. You can now sign in.';
@@ -27,7 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';      // not trimmed: spaces can be part of a password
 
-    if ($username === '' || $password === '') {
+    if (!csrf_verify()) {
+        $error = 'Your form expired. Please try again.';
+    } elseif ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
     } else {
         $pdo = db();
@@ -56,8 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 // 2. Correct username + correct password + active account = logged in
                 elseif ($row && $row['status'] === 'active' && password_verify($password, $row['password_hash'])) {
-                    session_regenerate_id(true);               // new session id after login
-                    $_SESSION['user_id'] = (int) $row['id'];
+                    // New session id, timestamps and CSRF token
+                    session_login((int) $row['id']);
 
                     // Keep the hash up to date if PHP's default algorithm / cost has changed
                     if (password_needs_rehash($row['password_hash'], PASSWORD_DEFAULT)) {
@@ -119,6 +122,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <form method="POST" action="login.php">
+      <?= csrf_field() ?>
+
       <div class="form-group">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" placeholder="Username" maxlength="50"
@@ -135,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <div class="form-actions">
         <button type="submit" class="btn btn--primary">Sign In</button>
-        <a href="forgot.php" class="btn btn--ghost">Forgot?</a>
+        <a href="forgot.php" class="btn btn--ghost" style="flex:none;white-space:nowrap">Forgot password?</a>
       </div>
     </form>
   </main>

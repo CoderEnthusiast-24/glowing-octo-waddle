@@ -4,7 +4,7 @@
  * Accounts themselves are still created in phpMyAdmin.
  *
  * Click "Reset password" on a row -> a form appears above the table.
- * Submitting the form saves the new password and reloads this page.
+ * Submitting the form (with a CSRF token) saves the new password.
  */
 require_once __DIR__ . '/includes/auth.php';
 require_admin();                       // staff get an "Access denied" page
@@ -25,21 +25,25 @@ if ($pdo && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirm  = $_POST['confirm'] ?? '';
 
-    $stmt = $pdo->prepare('SELECT id, username FROM users WHERE id = ?');
-    $stmt->execute([$resetId]);
-    $target = $stmt->fetch();
-
-    if (!$target) {
-        $error   = 'That user no longer exists.';
-        $resetId = 0;
+    if (!csrf_verify()) {
+        $error = 'Your form expired. Please try again.';   // keep the form open
     } else {
-        $problems = password_problems($password, $confirm);
-        if ($problems) {
-            $error = implode(' ', $problems);      // keep the form open
+        $stmt = $pdo->prepare('SELECT id, username FROM users WHERE id = ?');
+        $stmt->execute([$resetId]);
+        $target = $stmt->fetch();
+
+        if (!$target) {
+            $error   = 'That user no longer exists.';
+            $resetId = 0;
         } else {
-            user_set_password($pdo, $target['id'], $password);
-            $message = 'Password updated for ' . $target['username'] . '.';
-            $resetId = 0;                          // close the form
+            $problems = password_problems($password, $confirm);
+            if ($problems) {
+                $error = implode(' ', $problems);      // keep the form open
+            } else {
+                user_set_password($pdo, $target['id'], $password);
+                $message = 'Password updated for ' . $target['username'] . '.';
+                $resetId = 0;                          // close the form
+            }
         }
     }
 }
@@ -84,16 +88,17 @@ require_once __DIR__ . '/includes/header.php';
         </div>
 
         <form method="POST" action="users.php">
+          <?= csrf_field() ?>
           <input type="hidden" name="id" value="<?= (int) $resetUser['id'] ?>">
 
           <div class="form-group">
             <label for="password">New password</label>
-            <input type="password" id="password" name="password" required>
+            <input type="password" id="password" name="password" autocomplete="new-password" required>
           </div>
 
           <div class="form-group">
             <label for="confirm">Confirm new password</label>
-            <input type="password" id="confirm" name="confirm" required>
+            <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
           </div>
 
           <p class="muted small">Use at least <?= (int) MIN_PASSWORD_LENGTH ?> characters.</p>

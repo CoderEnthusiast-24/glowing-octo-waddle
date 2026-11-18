@@ -1,0 +1,48 @@
+1.0 
+- [x] Login
+- [x] Forgot password
+- [x] Dashboard
+- [x] Products
+- [x] Machines
+- [x] Supplies
+
+
+1.1
+- [x] Directory
+- [x] Users
+- [x] Stock (in / out)
+
+1.2
+- Minor tweaks in functionality
+- Dashboard now reflects true information based on real values (not hardcoded)
+- Added more example Products
+
+1.3
+- Made Relational Database Management System Tables 
+- Fixed all backend transactions
+- Can now focus on comments and suggestions that were given in Midterm Defense
+
+1.4 --- SESSION HARDENING
+- includes/config.php   New constants: SESSION_COOKIE_NAME, SESSION_IDLE_MINUTES (60), SESSION_ABSOLUTE_HOURS (6).
+- includes/session.php  Safe cookie (HttpOnly, SameSite=Lax, Secure on HTTPS, strict mode).
+                        Idle + absolute timeouts. auth_user() result is cached per request.
+                        New helpers: session_login(), app_session_end(), no_cache_headers(),
+                        csrf_token(), csrf_field(), csrf_verify().
+- includes/auth.php     Sends no-cache headers; redirects to login.php?expired=1 after a timeout.
+- login.php             Uses session_login() (new id + fresh CSRF token). Login form has a CSRF token.
+- logout.php            POST + CSRF only. Deletes the session cookie.
+- includes/header.php   Logout is now a POST form with a CSRF token.
+- users.php             Password reset form now has a CSRF token (and it is checked).
+- forgot.php            Kept as the admin failsafe. Both steps now have a CSRF token.
+- assets/js/main.js     Reloads the page if the browser restores it from the back/forward cache.
+
+Unchanged on purpose
+- stock_api.php, directory_api.php, barcode.php, stock.php, directory.php already use
+  $_SESSION['csrf'] + hash_equals, which is the same token the new helpers use.
+
+To delete
+- assets/js/users.js    Stale: points to users_api.php / resetModal, which do not exist.
+
+Known and accepted
+- forgot.php lets anyone reset an ACTIVE admin password knowing only the username.
+  Accepted for the school project; do not ship this to a real clinic.

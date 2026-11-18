@@ -1,6 +1,6 @@
 <?php
 /**
- * Forgot password page.
+ * Forgot password page (admin failsafe).
  *
  * Step 1: type your username. If it is an active administrator account,
  *         the page asks for a new password.
@@ -8,9 +8,16 @@
  *         `users` table and you are sent back to the login page.
  *
  * Staff accounts are told to contact the system administrator.
+ *
+ * NOTE: there is no identity check beyond the username. That is a deliberate
+ * choice for this school project (it is the way back in if the admin password
+ * is forgotten). Both steps are protected by a CSRF token.
  */
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session.php';   // also loads db.php
 require_once __DIR__ . '/includes/users.php';
+
+app_session_start();
+no_cache_headers();
 
 $username = trim($_POST['username'] ?? '');
 $error    = '';
@@ -19,7 +26,9 @@ $step     = 1;   // 1 = ask for username, 2 = ask for new password
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo = db();
 
-    if ($username === '') {
+    if (!csrf_verify()) {
+        $error = 'Your form expired. Please try again.';
+    } elseif ($username === '') {
         $error = 'Please enter your username.';
     } elseif (!$pdo) {
         $error = 'Cannot reach the database right now. Please contact the system administrator.';
@@ -82,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <form method="POST" action="forgot.php">
+      <?= csrf_field() ?>
       <input type="hidden" name="action" value="<?= $step === 2 ? 'reset' : 'check' ?>">
 
       <div class="form-group">
@@ -93,12 +103,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php if ($step === 2): ?>
         <div class="form-group">
           <label for="password">New password</label>
-          <input type="password" id="password" name="password" required>
+          <input type="password" id="password" name="password" autocomplete="new-password" required>
         </div>
 
         <div class="form-group">
           <label for="confirm">Confirm new password</label>
-          <input type="password" id="confirm" name="confirm" required>
+          <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
         </div>
       <?php endif; ?>
 

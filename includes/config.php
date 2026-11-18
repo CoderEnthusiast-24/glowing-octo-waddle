@@ -13,6 +13,11 @@ define('MIN_PASSWORD_LENGTH', 8);
 define('MAX_FAILED_ATTEMPTS', 5);
 define('LOCKOUT_MINUTES', 15);
 
+// Session hardening
+define('SESSION_COOKIE_NAME', 'DERMAVE_SESSID'); // own name, so other apps on localhost don't clash
+define('SESSION_IDLE_MINUTES', 60);              // logged out after this long with no activity
+define('SESSION_ABSOLUTE_HOURS', 6);             // logged out this long after signing in, no matter what
+
 // Database settings (XAMPP defaults - change if yours differ)
 define('DB_HOST', 'localhost');
 define('DB_PORT', 3306);   // XAMPP/MariaDB default. Change if MySQL runs on another port (e.g. 3307).

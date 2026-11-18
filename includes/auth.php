@@ -2,11 +2,14 @@
 /**
  * Include at the top of any page that needs a logged-in user.
  *
- * - sends the visitor to login.php if nobody is logged in
+ * - tells the browser not to cache the page (so Back cannot show it after logout)
+ * - sends the visitor to login.php if nobody is logged in (or the session timed out)
  * - gives the page $authUser (id, username, full_name, role, status)
  * - require_admin() blocks staff accounts from admin-only pages
  */
 require_once __DIR__ . '/session.php';
+
+no_cache_headers();
 
 /** Call near the top of an admin-only page. */
 function require_admin()
@@ -40,6 +43,6 @@ function require_admin()
 $authUser = auth_user();
 
 if (!$authUser) {
-    header('Location: login.php');
+    header('Location: login.php' . (session_expired_flag() ? '?expired=1' : ''));
     exit;
 }
